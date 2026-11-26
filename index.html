@@ -1,0 +1,2977 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cuckoo Sandbox | Malware Analysis & SOC Behavior Monitoring Platform</title>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <style>
+    :root {
+      --bg-primary: #080D18;
+      --bg-secondary: #0B1120;
+      --bg-card: rgba(15, 23, 42, 0.72);
+      --bg-card-hover: rgba(20, 31, 56, 0.88);
+      --border-subtle: rgba(56, 189, 248, 0.16);
+      --border-strong: rgba(56, 189, 248, 0.38);
+      --text-primary: #F1F5F9;
+      --text-secondary: #94A3B8;
+      --text-muted: #64748B;
+      --accent-cyan: #06B6D4;
+      --accent-cyan-bright: #22D3EE;
+      --accent-blue: #3B82F6;
+      --status-green: #10B981;
+      --status-orange: #F59E0B;
+      --status-red: #EF4444;
+      --sidebar-width: 268px;
+      --header-height: 68px;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+      overflow-x: hidden;
+      background-image:
+        radial-gradient(circle at 15% 15%, rgba(6, 182, 212, 0.06) 0%, transparent 40%),
+        radial-gradient(circle at 85% 80%, rgba(59, 130, 246, 0.06) 0%, transparent 40%);
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 7px; height: 7px; }
+    ::-webkit-scrollbar-track { background: #060A12; }
+    ::-webkit-scrollbar-thumb { background: #1E293B; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+
+    .mono { font-family: var(--font-mono); }
+
+    /* Layout Shell */
+    .app-shell {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: var(--sidebar-width);
+      background: rgba(8, 13, 24, 0.96);
+      border-right: 1px solid var(--border-subtle);
+      backdrop-filter: blur(14px);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      z-index: 100;
+      transition: transform 0.25s ease;
+    }
+
+    .sidebar-brand {
+      height: var(--header-height);
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 9px;
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(59, 130, 246, 0.25));
+      border: 1px solid var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent-cyan-bright);
+      flex-shrink: 0;
+      box-shadow: 0 0 16px rgba(6, 182, 212, 0.22);
+    }
+
+    .brand-text h1 {
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      color: var(--text-primary);
+    }
+
+    .brand-text span {
+      display: block;
+      font-size: 10.5px;
+      font-family: var(--font-mono);
+      color: var(--accent-cyan-bright);
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 16px 12px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .nav-section-label {
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      padding: 10px 12px 4px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 10px 13px;
+      border-radius: 8px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 13.5px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.18s ease;
+      background: transparent;
+      width: 100%;
+      text-align: left;
+    }
+
+    .nav-item:hover {
+      background: rgba(30, 41, 59, 0.55);
+      color: var(--text-primary);
+    }
+
+    .nav-item.active {
+      background: linear-gradient(90deg, rgba(6, 182, 212, 0.16), rgba(59, 130, 246, 0.08));
+      border-color: rgba(34, 211, 238, 0.35);
+      color: var(--accent-cyan-bright);
+      font-weight: 600;
+    }
+
+    .nav-item svg {
+      width: 17px;
+      height: 17px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-footer {
+      padding: 14px 16px;
+      border-top: 1px solid var(--border-subtle);
+      background: rgba(11, 17, 32, 0.8);
+    }
+
+    .isolation-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11.5px;
+      color: var(--status-green);
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      padding: 8px 10px;
+      border-radius: 7px;
+    }
+
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--status-green);
+      box-shadow: 0 0 8px var(--status-green);
+      animation: pulse 2s infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.45; transform: scale(0.88); }
+    }
+
+    /* Main Container */
+    .main-wrapper {
+      flex: 1;
+      margin-left: var(--sidebar-width);
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    /* Top Header */
+    .top-header {
+      height: var(--header-height);
+      background: rgba(11, 17, 32, 0.85);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 90;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .mobile-menu-btn {
+      display: none;
+      background: rgba(30, 41, 59, 0.7);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      padding: 7px 9px;
+      border-radius: 7px;
+      cursor: pointer;
+    }
+
+    .page-breadcrumb {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .page-breadcrumb .kicker {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: var(--accent-cyan-bright);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .page-breadcrumb h2 {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* Status Badges & Buttons */
+    .mode-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 11px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      border: 1px solid;
+    }
+
+    .mode-badge.demo {
+      background: rgba(245, 158, 11, 0.12);
+      border-color: rgba(245, 158, 11, 0.4);
+      color: #FBBF24;
+    }
+
+    .mode-badge.disconnected {
+      background: rgba(239, 68, 68, 0.12);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #F87171;
+    }
+
+    .mode-badge.connected {
+      background: rgba(16, 185, 129, 0.12);
+      border-color: rgba(16, 185, 129, 0.4);
+      color: #34D399;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 9px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.18s ease;
+      font-family: var(--font-sans);
+      text-decoration: none;
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #06B6D4, #2563EB);
+      color: #FFFFFF;
+      box-shadow: 0 4px 14px rgba(6, 182, 212, 0.25);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: rgba(30, 41, 59, 0.75);
+      border-color: var(--border-strong);
+      color: var(--text-primary);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: rgba(51, 65, 85, 0.85);
+      border-color: var(--accent-cyan-bright);
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.14);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #FCA5A5;
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: rgba(239, 68, 68, 0.26);
+    }
+
+    .btn-sm {
+      padding: 6px 11px;
+      font-size: 12px;
+    }
+
+    /* Main Content Area */
+    .content-area {
+      padding: 24px;
+      max-width: 1480px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .page-view {
+      display: none;
+      animation: fadeIn 0.22s ease;
+    }
+
+    .page-view.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Glass Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 20px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+      flex-wrap: wrap;
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-title svg {
+      color: var(--accent-cyan-bright);
+      width: 18px;
+      height: 18px;
+    }
+
+    /* Grids */
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+    .mb-20 { margin-bottom: 20px; }
+    .mt-20 { margin-top: 20px; }
+
+    /* Hero Section (Page 1) */
+    .hero-box {
+      position: relative;
+      border-radius: 16px;
+      padding: 36px 32px;
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(8, 13, 24, 0.96));
+      border: 1px solid var(--border-strong);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+
+    .hero-box::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image: linear-gradient(rgba(34, 211, 238, 0.05) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(34, 211, 238, 0.05) 1px, transparent 1px);
+      background-size: 32px 32px;
+      pointer-events: none;
+    }
+
+    .hero-content {
+      position: relative;
+      z-index: 1;
+      max-width: 860px;
+    }
+
+    .thesis-tag {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 6px;
+      background: rgba(6, 182, 212, 0.12);
+      border: 1px solid rgba(34, 211, 238, 0.3);
+      color: var(--accent-cyan-bright);
+      font-size: 11.5px;
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+
+    .hero-title {
+      font-size: clamp(28px, 4vw, 42px);
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      background: linear-gradient(90deg, #FFFFFF, #22D3EE);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      line-height: 1.15;
+    }
+
+    .hero-subtitle {
+      font-size: 18px;
+      font-weight: 600;
+      color: #CBD5E1;
+      margin-top: 8px;
+    }
+
+    .hero-desc {
+      color: var(--text-secondary);
+      font-size: 14.5px;
+      margin-top: 12px;
+      max-width: 720px;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+      flex-wrap: wrap;
+    }
+
+    /* Stat KPIs */
+    .stat-card {
+      background: rgba(15, 23, 42, 0.78);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 800;
+      font-family: var(--font-mono);
+    }
+
+    .tech-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+      gap: 12px;
+    }
+
+    .tech-pill {
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 13px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      transition: border-color 0.2s;
+    }
+
+    .tech-pill:hover {
+      border-color: var(--accent-cyan-bright);
+    }
+
+    .tech-pill strong {
+      font-size: 13.5px;
+      color: var(--text-primary);
+    }
+
+    .tech-pill span {
+      font-size: 11.5px;
+      color: var(--text-secondary);
+    }
+
+    /* Badges for Verdicts & Status */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+    }
+
+    .badge-clean { background: rgba(16, 185, 129, 0.14); color: #34D399; border: 1px solid rgba(16, 185, 129, 0.35); }
+    .badge-suspicious { background: rgba(245, 158, 11, 0.14); color: #FBBF24; border: 1px solid rgba(245, 158, 11, 0.35); }
+    .badge-malicious { background: rgba(239, 68, 68, 0.14); color: #F87171; border: 1px solid rgba(239, 68, 68, 0.35); }
+    .badge-info { background: rgba(6, 182, 212, 0.14); color: #22D3EE; border: 1px solid rgba(6, 182, 212, 0.35); }
+    .badge-unknown { background: rgba(100, 116, 139, 0.18); color: #94A3B8; border: 1px solid rgba(148, 163, 184, 0.3); }
+
+    /* Tables */
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      border-radius: 9px;
+      border: 1px solid rgba(148, 163, 184, 0.14);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13px;
+    }
+
+    th {
+      background: rgba(15, 23, 42, 0.95);
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    th.sortable {
+      cursor: pointer;
+    }
+
+    th.sortable:hover {
+      color: var(--accent-cyan-bright);
+    }
+
+    td {
+      padding: 11px 14px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+      color: var(--text-primary);
+      vertical-align: middle;
+    }
+
+    tr:hover td {
+      background: rgba(30, 41, 59, 0.42);
+    }
+
+    tr.row-warning td {
+      background: rgba(239, 68, 68, 0.08);
+    }
+
+    /* Inputs & Selects */
+    .input, .select {
+      background: rgba(8, 13, 24, 0.85);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: var(--font-sans);
+      outline: none;
+      transition: border-color 0.18s;
+    }
+
+    .input:focus, .select:focus {
+      border-color: var(--accent-cyan-bright);
+    }
+
+    /* Interactive System Architecture Diagram (Page 3) */
+    .arch-layout {
+      display: grid;
+      grid-template-columns: 1.55fr 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .arch-canvas {
+      background: #060A13;
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 20px;
+      position: relative;
+    }
+
+    .arch-node {
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .arch-node:hover rect.node-box {
+      stroke: #22D3EE;
+      stroke-width: 2;
+    }
+
+    .arch-node.selected rect.node-box {
+      stroke: #22D3EE;
+      stroke-width: 2.5;
+      filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.45));
+    }
+
+    .flow-line {
+      stroke-dasharray: 6 6;
+      animation: dashFlow 18s linear infinite;
+    }
+
+    @keyframes dashFlow {
+      to { stroke-dashoffset: -240; }
+    }
+
+    /* Dropzone (Page 4) */
+    .dropzone {
+      border: 2px dashed rgba(34, 211, 238, 0.38);
+      border-radius: 14px;
+      padding: 38px 24px;
+      text-align: center;
+      background: rgba(15, 23, 42, 0.45);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--accent-cyan-bright);
+      background: rgba(6, 182, 212, 0.08);
+    }
+
+    .step-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .step-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 14px;
+      border-radius: 9px;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      font-size: 13px;
+    }
+
+    .step-item.active {
+      border-color: var(--accent-cyan-bright);
+      background: rgba(6, 182, 212, 0.1);
+    }
+
+    .step-item.done {
+      border-color: rgba(16, 185, 129, 0.35);
+      background: rgba(16, 185, 129, 0.07);
+    }
+
+    /* Key-Value Info Grid */
+    .kv-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 12px;
+    }
+
+    .kv-item {
+      background: rgba(8, 13, 24, 0.65);
+      border: 1px solid rgba(148, 163, 184, 0.1);
+      padding: 10px 13px;
+      border-radius: 8px;
+    }
+
+    .kv-item .k {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .kv-item .v {
+      font-size: 12.5px;
+      font-family: var(--font-mono);
+      color: var(--text-primary);
+      margin-top: 3px;
+      word-break: break-all;
+    }
+
+    /* Charts Container */
+    .chart-box {
+      position: relative;
+      height: 250px;
+      width: 100%;
+    }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 7, 18, 0.78);
+      backdrop-filter: blur(6px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      padding: 16px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-box {
+      background: #0F172A;
+      border: 1px solid var(--border-strong);
+      border-radius: 14px;
+      max-width: 560px;
+      width: 100%;
+      padding: 22px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    /* Toast Notifications */
+    .toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 300;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 360px;
+    }
+
+    .toast {
+      background: #0F172A;
+      border: 1px solid var(--border-strong);
+      border-left: 4px solid var(--accent-cyan-bright);
+      color: var(--text-primary);
+      padding: 12px 15px;
+      border-radius: 9px;
+      font-size: 13px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+      animation: fadeIn 0.2s ease;
+    }
+
+    .toast.warn { border-left-color: var(--status-orange); }
+    .toast.error { border-left-color: var(--status-red); }
+    .toast.success { border-left-color: var(--status-green); }
+
+    /* Concept Accordion / Cards on Page 2 */
+    .concept-card {
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .concept-card h4 {
+      color: var(--accent-cyan-bright);
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+
+    .concept-card p {
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    /* Code block in Docs */
+    pre.code-block {
+      background: #050912;
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      border-radius: 8px;
+      padding: 13px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: #E2E8F0;
+      overflow-x: auto;
+      line-height: 1.5;
+    }
+
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 95;
+    }
+
+    @media (max-width: 1080px) {
+      .arch-layout { grid-template-columns: 1fr; }
+      .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 860px) {
+      .sidebar { transform: translateX(-100%); }
+      .sidebar.open { transform: translateX(0); }
+      .sidebar-overlay.open { display: block; }
+      .main-wrapper { margin-left: 0; }
+      .mobile-menu-btn { display: inline-flex; }
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 520px) {
+      .grid-4 { grid-template-columns: 1fr; }
+      .content-area { padding: 16px; }
+      .hero-box { padding: 24px 18px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <div class="app-shell">
+    <!-- SIDEBAR NAVIGATION -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <path d="M9 12l2 2 4-4"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>CUCKOO SOC</h1>
+          <span>MALWARE SANDBOX v2.0</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Main Navigation">
+        <div class="nav-section-label">Research & Overview</div>
+        <button class="nav-item active" data-page="overview">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          1. Overview
+        </button>
+        <button class="nav-item" data-page="project-info">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          2. Project Information
+        </button>
+        <button class="nav-item" data-page="architecture">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="8" height="6" rx="1"/><rect x="14" y="15" width="8" height="6" rx="1"/><path d="M12 9v3M6 12h12M6 12v3M18 12v3"/></svg>
+          3. System Architecture
+        </button>
+
+        <div class="nav-section-label">SOC Operations</div>
+        <button class="nav-item" data-page="analyze">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          4. Malware Analysis
+        </button>
+        <button class="nav-item" data-page="dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          5. Analysis Dashboard
+        </button>
+        <button class="nav-item" data-page="history">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          6. Analysis History
+        </button>
+
+        <div class="nav-section-label">Infrastructure & Docs</div>
+        <button class="nav-item" data-page="system-info">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+          7. System Information
+        </button>
+        <button class="nav-item" data-page="docs">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          8. Documentation
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="isolation-pill">
+          <span class="pulse-dot"></span>
+          <span>Browser Execution: DISABLED<br><small style="color:#94A3B8">Guest VM Isolation Active</small></span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT WRAPPER -->
+    <div class="main-wrapper">
+      <!-- UNIFIED TOP HEADER -->
+      <header class="top-header">
+        <div class="header-left">
+          <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle Menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div class="page-breadcrumb">
+            <span class="kicker" id="headerKicker">SCIENTIFIC RESEARCH PLATFORM</span>
+            <h2 id="headerTitle">Overview & Project Summary</h2>
+          </div>
+        </div>
+
+        <div class="header-right">
+          <span class="mode-badge demo" id="globalModeBadge" title="Hệ thống đang chạy dữ liệu minh họa an toàn (không phải quét mã độc thật)">
+            ● DEMO MODE (SAFE SYNTHETIC DATA)
+          </span>
+          <button class="btn btn-secondary btn-sm" id="openApiConfigBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Backend / Demo Config
+          </button>
+        </div>
+      </header>
+
+      <!-- MAIN VIEWPORT -->
+      <main class="content-area">
+
+        <!-- ========================================================= -->
+        <!-- TRANG 1: OVERVIEW                                         -->
+        <!-- ========================================================= -->
+        <section class="page-view active" id="page-overview">
+          <div class="hero-box">
+            <div class="hero-content">
+              <div class="thesis-tag">
+                ĐỀ TÀI NCKH: NGHIÊN CỨU PHÂN TÍCH TỆP THỰC THI (.EXE) VÀ XÂY DỰNG HỆ THỐNG WEB DASHBOARD GIÁM SÁT HÀNH VI MÃ ĐỘC TÍCH HỢP CUCKOO SANDBOX API
+              </div>
+              <h1 class="hero-title">CUCKOO SANDBOX</h1>
+              <div class="hero-subtitle">Automated Malware Analysis & Behavior Monitoring Platform.</div>
+              <p class="hero-desc">
+                A research project focused on Windows executable analysis, automated sandbox execution, and behavioral visualization through an integrated web dashboard.
+              </p>
+              <div class="hero-actions">
+                <button class="btn btn-primary" data-nav="project-info">Explore Project</button>
+                <button class="btn btn-secondary" data-nav="dashboard">Open Dashboard</button>
+                <button class="btn btn-secondary" data-nav="architecture">System Architecture</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. System Statistics -->
+          <div class="card mb-20">
+            <div class="card-header">
+              <div class="card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+                System Statistics
+              </div>
+              <span class="badge badge-suspicious" id="overviewStatsBadge">DEMO DATA (CHƯA KẾT NỐI BACKEND THẬT)</span>
+            </div>
+            <div class="grid-4">
+              <div class="stat-card">
+                <div class="stat-label"><span>Total Analyzed Files</span><span class="mono" style="color:#22D3EE">ALL</span></div>
+                <div class="stat-value" style="color:#22D3EE" id="statTotal">0</div>
+                <small style="color:var(--text-muted)">Tổng số mẫu PE (.exe) đã xử lý</small>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label"><span>Clean Files</span><span class="badge badge-clean">SAFE</span></div>
+                <div class="stat-value" style="color:#10B981" id="statClean">0</div>
+                <small style="color:var(--text-muted)">Hành vi hợp lệ, không dấu hiệu độc hại</small>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label"><span>Suspicious Files</span><span class="badge badge-suspicious">WARN</span></div>
+                <div class="stat-value" style="color:#F59E0B" id="statSuspicious">0</div>
+                <small style="color:var(--text-muted)">Entropy cao hoặc gọi API nhạy cảm</small>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label"><span>Malicious Files</span><span class="badge badge-malicious">ALERT</span></div>
+                <div class="stat-value" style="color:#EF4444" id="statMalicious">0</div>
+                <small style="color:var(--text-muted)">Phát hiện hành vi mã độc trong Sandbox</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- 1. Project Overview -->
+          <div class="grid-3 mb-20">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">1.1 Giới thiệu đề tài</div>
+              </div>
+              <p style="color:var(--text-secondary)">
+                Đề tài tập trung nghiên cứu cấu trúc nhị phân của tệp thực thi Windows Portable Executable (<span class="mono" style="color:#22D3EE">.EXE</span>), kết hợp kỹ thuật phân tích tĩnh (Static Analysis) và phân tích động tự động (Dynamic Analysis) trong môi trường máy ảo cô lập sử dụng <strong>Cuckoo Sandbox</strong>, đồng thời trực quan hóa toàn bộ dữ liệu hành vi lên giao diện Web SOC Dashboard.
+              </p>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">1.2 Lý do nghiên cứu</div>
+              </div>
+              <p style="color:var(--text-secondary)">
+                Các biến thể mã độc hiện đại thường sử dụng kỹ thuật làm rối (obfuscation), nén (packing) và né tránh phát hiện dựa trên chữ ký tĩnh truyền thống. Việc giám sát trực tiếp hành vi hệ thống (tiến trình, Registry, File System, Network) thông qua Sandbox tự động giúp nâng cao khả năng nhận diện mối đe dọa và giảm rủi ro phân tích thủ công.
+              </p>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">1.3 Mục tiêu dự án</div>
+              </div>
+              <ul style="color:var(--text-secondary); padding-left:18px; display:flex; flex-direction:column; gap:6px;">
+                <li>Xây dựng mô hình Lab ảo hóa cô lập an toàn (Windows Host – Ubuntu Server – Windows Guest VM).</li>
+                <li>Tự động hóa trích xuất đặc trưng PE Header, IAT và Shannon Entropy qua thư viện <span class="mono">pefile</span>.</li>
+                <li>Tích hợp RESTful API giao tiếp với Cuckoo Sandbox và chuẩn hóa báo cáo JSON lên Web Dashboard.</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- 2. Technology Stack -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                Technology Stack
+              </div>
+              <span class="mono" style="font-size:11.5px; color:var(--text-muted)">8 CORE COMPONENTS</span>
+            </div>
+            <div class="tech-grid">
+              <div class="tech-pill"><strong>Oracle VM VirtualBox</strong><span>Type-2 Hypervisor & Host-Only Network</span></div>
+              <div class="tech-pill"><strong>Ubuntu Server</strong><span>Cuckoo Host & Python API Server</span></div>
+              <div class="tech-pill"><strong>Windows 10 Guest</strong><span>Isolated Dynamic Execution VM</span></div>
+              <div class="tech-pill"><strong>Cuckoo Sandbox</strong><span>Automated Malware Analysis Engine</span></div>
+              <div class="tech-pill"><strong>Python 3</strong><span>Core Backend & Automation Scripting</span></div>
+              <div class="tech-pill"><strong>Flask / FastAPI</strong><span>RESTful Middleware & Report Parser</span></div>
+              <div class="tech-pill"><strong>pefile</strong><span>Static PE Header, IAT & Entropy Parser</span></div>
+              <div class="tech-pill"><strong>Chart.js</strong><span>SOC Behavioral Data Visualization</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- TRANG 2: PROJECT INFORMATION                              -->
+        <!-- ========================================================= -->
+        <section class="page-view" id="page-project-info">
+          <div class="card mb-20">
+            <div class="card-header">
+              <div class="card-title">Cơ sở lý thuyết & Nội dung nghiên cứu khoa học</div>
+              <span class="badge badge-info">9 RESEARCH MODULES</span>
+            </div>
+            <div class="grid-3">
+              <div class="concept-card">
+                <h4>1. Introduction (Giới thiệu)</h4>
+                <p>Hệ thống tự động hóa quy trình tiếp nhận, kiểm tra cấu trúc nhị phân và theo dõi hành vi thực thi của tệp <span class="mono">.exe</span> trên nền tảng web tập trung.</p>
+              </div>
+              <div class="concept-card">
+                <h4>2. Research Objectives (Mục tiêu)</h4>
+                <p>Rút ngắn thời gian phân tích sơ bộ (triage), kết hợp chỉ số tĩnh và động để đưa ra phân loại mức độ rủi ro (Clean / Suspicious / Malicious) có giải thích rõ ràng.</p>
+              </div>
+              <div class="concept-card">
+                <h4>3. Research Scope (Phạm vi)</h4>
+                <p>Tập trung vào tệp thực thi Windows PE32/PE32+ (<span class="mono">.exe</span>), triển khai trong mạng nội bộ cô lập (Host-Only), không kết nối Internet công cộng khi chạy mẫu.</p>
+              </div>
+              <div class="concept-card">
+                <h4>4. Malware Analysis</h4>
+                <p>Quá trình mổ xẻ cấu trúc, chức năng và tác động của một tệp nghi ngờ nhằm xác định cơ chế lây nhiễm, giao tiếp C2 và mức độ nguy hại đối với hệ thống.</p>
+              </div>
+              <div class="concept-card">
+                <h4>5. Static Analysis (Phân tích tĩnh)</h4>
+                <p>Kiểm tra mã nhị phân mà <strong>không thực thi</strong> tệp: tính toán mã băm, phân tích cấu trúc PE Header, bảng hàm nhập (IAT), chuỗi ký tự và độ hỗn loạn Entropy.</p>
+              </div>
+              <div class="concept-card">
+                <h4>6. Dynamic Analysis (Phân tích động)</h4>
+                <p>Thực thi tệp trong môi trường giám sát (Sandbox) để ghi nhận hành vi thực tế: tạo tiến trình con, chỉnh sửa Registry, ghi/xóa tệp và kết nối mạng.</p>
+              </div>
+              <div class="concept-card">
+                <h4>7. Sandbox Technology</h4>
+                <p>Cơ chế cô lập tài nguyên cho phép chạy chương trình không đáng tin cậy an toàn, sau đó khôi phục máy ảo về trạng thái sạch ban đầu (Snapshot Revert).</p>
+              </div>
+              <div class="concept-card">
+                <h4>8. Cuckoo Sandbox Architecture</h4>
+                <p>Gồm máy chủ quản lý (Ubuntu) điều phối qua mạng ảo tới Agent chạy bên trong Windows Guest VM để hook API và thu thập báo cáo hành vi JSON.</p>
+              </div>
+              <div class="concept-card">
+                <h4>9. Technologies Used</h4>
+                <p>Kết hợp VirtualBox, Ubuntu Server, Windows 10 Guest, Cuckoo Sandbox REST API, Python FastAPI/Flask, <span class="mono">pefile</span>, HTML5/CSS3/JS và Chart.js.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Thuật ngữ chuyên ngành bắt buộc -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Giải thích thuật ngữ kỹ thuật chuyên ngành</div>
+              <span class="mono" style="font-size:11.5px; color:var(--accent-cyan-bright)">TECHNICAL GLOSSARY</span>
+            </div>
+            <div class="grid-2">
+              <div class="concept-card">
+                <h4>Portable Executable (PE) & PE Header</h4>
+                <p><strong>PE</strong> là định dạng tệp thực thi tiêu chuẩn của Windows (<span class="mono">.exe, .dll, .sys</span>). <strong>PE Header</strong> (gồm DOS Header, NT Headers, File Header, Optional Header và Section Table) chứa siêu dữ liệu giúp Windows Loader nạp mã vào bộ nhớ, xác định kiến trúc (x86/x64), Entry Point và các phân đoạn như <span class="mono">.text</span>, <span class="mono">.data</span>, <span class="mono">.rsrc</span>.</p>
+              </div>
+              <div class="concept-card">
+                <h4>Import Address Table (IAT)</h4>
+                <p>Bảng cấu trúc bên trong tệp PE liệt kê các thư viện liên kết động (DLL) và các hàm Windows API mà chương trình gọi tới (ví dụ: <span class="mono">VirtualAlloc</span>, <span class="mono">WriteProcessMemory</span>, <span class="mono">RegSetValueEx</span>). Phân tích IAT giúp dự đoán ý đồ hành vi trước khi chạy tệp.</p>
+              </div>
+              <div class="concept-card">
+                <h4>Shannon Entropy (Độ hỗn loạn thông tin)</h4>
+                <p>Thước đo tính ngẫu nhiên của dữ liệu byte trong từng Section (thang đo từ <span class="mono">0.0</span> đến <span class="mono">8.0 bits/byte</span>). Các Section có giá trị <strong>&gt; 6.8 bits/byte</strong> thường là dấu hiệu tệp đã bị nén (Packed bằng UPX, Themida) hoặc mã hóa payload để qua mặt phần mềm diệt virus.</p>
+              </div>
+              <div class="concept-card">
+                <h4>MD5, SHA-1, SHA-256 & ImpHash</h4>
+                <p>Các hàm băm mật mã tạo ra "dấu vân tay số" duy nhất định danh tệp. Trong đó <strong>SHA-256</strong> là chuẩn tra cứu Threat Intelligence chính xác cao, còn <strong>ImpHash</strong> (Import Hash) băm danh sách hàm nhập giúp nhận diện các biến thể cùng một họ mã độc.</p>
+              </div>
+              <div class="concept-card">
+                <h4>Sandbox Isolation (Cô lập môi trường)</h4>
+                <p>Thiết lập ranh giới bảo mật nghiêm ngặt giữa Host Machine và Guest VM bằng card mạng ảo <strong>Host-Only Adapter</strong>, vô hiệu hóa Shared Folders/Clipboard và sử dụng Snapshot sạch để ngăn mã độc thoát ly (VM Escape) hoặc lây lan ra mạng thật.</p>
+              </div>
+              <div class="concept-card">
+                <h4>RESTful API</h4>
+                <p>Giao thức giao tiếp chuẩn HTTP/JSON giúp Backend Python gửi tệp mẫu tới Cuckoo Sandbox (<span class="mono">POST /tasks/create/file</span>), truy vấn tiến độ (<span class="mono">GET /tasks/view/{id}</span>) và tải báo cáo phân tích (<span class="mono">GET /tasks/report/{id}</span>) một cách tự động.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- TRANG 3: SYSTEM ARCHITECTURE                              -->
+        <!-- ========================================================= -->
+        <section class="page-view" id="page-architecture">
+          <div class="card mb-20">
+            <div class="card-header">
+              <div class="card-title">Sơ đồ kiến trúc hệ thống tương tác (Interactive System Architecture)</div>
+              <span class="badge badge-info">NHẤN VÀO TỪNG THÀNH PHẦN ĐỂ XEM CHI TIẾT</span>
+            </div>
+
+            <div class="arch-layout">
+              <!-- Interactive SVG Diagram -->
+              <div class="arch-canvas">
+                <svg viewBox="0 0 760 560" width="100%" height="auto" role="img" aria-label="Sơ đồ kiến trúc hệ thống Cuckoo Sandbox">
+                  <defs>
+                    <marker id="arrowCyan" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                      <path d="M 0 1 L 10 5 L 0 9 z" fill="#22D3EE"/>
+                    </marker>
+                    <marker id="arrowOrange" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                      <path d="M 0 1 L 10 5 L 0 9 z" fill="#F59E0B"/>
+                    </marker>
+                    <marker id="arrowGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                      <path d="M 0 1 L 10 5 L 0 9 z" fill="#10B981"/>
+                    </marker>
+                  </defs>
+
+                  <!-- Outer Host Machine Container -->
+                  <rect x="16" y="14" width="728" height="412" rx="14" fill="rgba(15,23,42,0.55)" stroke="rgba(59,130,246,0.45)" stroke-width="1.5" stroke-dasharray="5 4"/>
+                  <text x="34" y="38" fill="#60A5FA" font-family="JetBrains Mono" font-size="12" font-weight="700">PHYSICAL LAYER: HOST MACHINE (WINDOWS)</text>
+
+                  <!-- Node 1: Host Machine -->
+                  <g class="arch-node selected" data-node="host">
+                    <rect class="node-box" x="240" y="48" width="280" height="48" rx="9" fill="#0F172A" stroke="#3B82F6" stroke-width="1.5"/>
+                    <text x="380" y="70" text-anchor="middle" fill="#F1F5F9" font-family="Inter" font-size="13" font-weight="700">HOST MACHINE (Windows Physical)</text>
+                    <text x="380" y="86" text-anchor="middle" fill="#94A3B8" font-family="JetBrains Mono" font-size="10.5">Hardware & Host OS Isolation Boundary</text>
+                  </g>
+
+                  <!-- Connector Host -> VirtualBox -->
+                  <line x1="380" y1="96" x2="380" y2="122" stroke="#22D3EE" stroke-width="2" marker-end="url(#arrowCyan)"/>
+
+                  <!-- Node 2: Oracle VM VirtualBox -->
+                  <g class="arch-node" data-node="virtualbox">
+                    <rect class="node-box" x="190" y="122" width="380" height="46" rx="9" fill="#0F172A" stroke="#06B6D4" stroke-width="1.5"/>
+                    <text x="380" y="143" text-anchor="middle" fill="#22D3EE" font-family="Inter" font-size="13" font-weight="700">ORACLE VM VIRTUALBOX (Hypervisor)</text>
+                    <text x="380" y="159" text-anchor="middle" fill="#94A3B8" font-family="JetBrains Mono" font-size="10.5">Host-Only Network (vboxnet0: 192.168.56.0/24)</text>
+                  </g>
+
+                  <!-- Split Lines from VirtualBox to Ubuntu Server and Windows Guest -->
+                  <path d="M 280 168 L 280 186 L 195 186 L 195 204" fill="none" stroke="#22D3EE" stroke-width="2" marker-end="url(#arrowCyan)"/>
+                  <path d="M 480 168 L 480 186 L 565 186 L 565 204" fill="none" stroke="#F59E0B" stroke-width="2" marker-end="url(#arrowOrange)"/>
+
+                  <!-- Left VM Box: Ubuntu Server -->
+                  <rect x="34" y="204" width="322" height="206" rx="12" fill="rgba(6,182,212,0.06)" stroke="rgba(6,182,212,0.35)" stroke-width="1.3"/>
+                  <text x="50" y="224" fill="#22D3EE" font-family="JetBrains Mono" font-size="11" font-weight="700">VM 1: UBUNTU SERVER (192.168.56.1)</text>
+
+                  <!-- Node 3: Cuckoo Sandbox -->
+                  <g class="arch-node" data-node="cuckoo">
+                    <rect class="node-box" x="54" y="236" width="282" height="58" rx="8" fill="#0F172A" stroke="#06B6D4" stroke-width="1.4"/>
+                    <text x="195" y="259" text-anchor="middle" fill="#F1F5F9" font-family="Inter" font-size="13" font-weight="700">Cuckoo Sandbox Engine</text>
+                    <text x="195" y="277" text-anchor="middle" fill="#94A3B8" font-family="JetBrains Mono" font-size="10.5">Task Scheduler, VBox Machinery & Cuckoo API</text>
+                  </g>
+
+                  <line x1="195" y1="294" x2="195" y2="324" stroke="#22D3EE" stroke-width="2" marker-end="url(#arrowCyan)"/>
+
+                  <!-- Node 4: Backend API -->
+                  <g class="arch-node" data-node="backend">
+                    <rect class="node-box" x="54" y="326" width="282" height="66" rx="8" fill="#0F172A" stroke="#10B981" stroke-width="1.4"/>
+                    <text x="195" y="350" text-anchor="middle" fill="#34D399" font-family="Inter" font-size="13" font-weight="700">Python Backend API (FastAPI/Flask)</text>
+                    <text x="195" y="368" text-anchor="middle" fill="#94A3B8" font-family="JetBrains Mono" font-size="10.5">pefile Static Parser + REST Middleware</text>
+                  </g>
+
+                  <!-- Right VM Box: Windows Guest VM -->
+                  <rect x="404" y="204" width="322" height="206" rx="12" fill="rgba(245,158,11,0.06)" stroke="rgba(245,158,11,0.4)" stroke-width="1.3"/>
+                  <text x="420" y="224" fill="#FBBF24" font-family="JetBrains Mono" font-size="11" font-weight="700">VM 2: WINDOWS GUEST VM (ISOLATED)</text>
+
+                  <!-- Node 5: Cuckoo Agent -->
+                  <g class="arch-node" data-node="agent">
+                    <rect class="node-box" x="424" y="236" width="282" height="58" rx="8" fill="#0F172A" stroke="#F59E0B" stroke-width="1.4"/>
+                    <text x="565" y="259" text-anchor="middle" fill="#F1F5F9" font-family="Inter" font-size="13" font-weight="700">Cuckoo Agent (agent.py)</text>
+                    <text x="565" y="277" text-anchor="middle" fill="#94A3B8" font-family="JetBrains Mono" font-size="10.5">Receives .EXE Sample & Controls Execution</text>
+                  </g>
+
+                  <line x1="565" y1="294" x2="565" y2="324" stroke="#F59E0B" stroke-width="2" marker-end="url(#arrowOrange)"/>
+
+                  <!-- Node 6: Behavior Monitoring -->
+                  <g class="arch-node" data-node="monitoring">
+                    <rect class="node-box" x="424" y="326" width="282" height="66" rx="8" fill="#0F172A" stroke="#EF4444" stroke-width="1.4"/>
+                    <text x="565" y="350" text-anchor="middle" fill="#F87171" font-family="Inter" font-size="13" font-weight="700">Behavior Monitoring & API Hooking</text>
+                    <text x="565" y="368" text-anchor="middle" fill="#94A3B8" font-family="JetBrains Mono" font-size="10.5">Process, File, Registry, Network Telemetry</text>
+                  </g>
+
+                  <!-- Telemetry Return Line: Behavior Monitoring -> Cuckoo / Backend API -->
+                  <path class="flow-line" d="M 424 359 L 338 359" fill="none" stroke="#10B981" stroke-width="2.2" marker-end="url(#arrowGreen)"/>
+                  <text x="381" y="351" text-anchor="middle" fill="#34D399" font-family="JetBrains Mono" font-size="9.5">JSON Report</text>
+
+                  <!-- Cuckoo <-> Agent Control Line -->
+                  <path class="flow-line" d="M 336 265 L 422 265" fill="none" stroke="#22D3EE" stroke-width="2" marker-end="url(#arrowCyan)"/>
+                  <text x="380" y="257" text-anchor="middle" fill="#22D3EE" font-family="JetBrains Mono" font-size="9.5">XMLRPC / API</text>
+
+                  <!-- Line Backend API -> Web Dashboard -->
+                  <line x1="195" y1="392" x2="195" y2="444" stroke="#10B981" stroke-width="2.2" marker-end="url(#arrowGreen)"/>
+                  <text x="278" y="421" fill="#34D399" font-family="JetBrains Mono" font-size="10.5">RESTful JSON (/api/tasks)</text>
+
+                  <!-- Node 7: Web Dashboard -->
+                  <g class="arch-node" data-node="dashboard-node">
+                    <rect class="node-box" x="54" y="446" width="282" height="46" rx="8" fill="#0F172A" stroke="#22D3EE" stroke-width="1.5"/>
+                    <text x="195" y="468" text-anchor="middle" fill="#22D3EE" font-family="Inter" font-size="13" font-weight="700">Web Dashboard (HTML5/CSS3/JS/Chart.js)</text>
+                    <text x="195" y="483" text-anchor="middle" fill="#94A3B8" font-family="JetBrains Mono" font-size="10">SOC Visualization & Static/Dynamic Views</text>
+                  </g>
+
+                  <line x1="336" y1="469" x2="422" y2="469" stroke="#22D3EE" stroke-width="2" marker-end="url(#arrowCyan)"/>
+
+                  <!-- Node 8: Browser -->
+                  <g class="arch-node" data-node="browser">
+                    <rect class="node-box" x="424" y="446" width="282" height="46" rx="8" fill="#0F172A" stroke="#3B82F6" stroke-width="1.5"/>
+                    <text x="565" y="468" text-anchor="middle" fill="#F1F5F9" font-family="Inter" font-size="13" font-weight="700">Analyst Web Browser</text>
+                    <text x="565" y="483" text-anchor="middle" fill="#94A3B8" font-family="JetBrains Mono" font-size="10">Zero Local Malware Execution (View Only)</text>
+                  </g>
+
+                  <!-- Legend Footer inside SVG -->
+                  <rect x="16" y="508" width="728" height="40" rx="8" fill="rgba(15,23,42,0.8)" stroke="rgba(148,163,184,0.2)"/>
+                  <circle cx="36" cy="528" r="5" fill="#3B82F6"/><text x="48" y="532" fill="#CBD5E1" font-size="11">Host Layer</text>
+                  <circle cx="136" cy="528" r="5" fill="#06B6D4"/><text x="148" y="532" fill="#CBD5E1" font-size="11">Ubuntu / Cuckoo Core</text>
+                  <circle cx="292" cy="528" r="5" fill="#F59E0B"/><text x="304" y="532" fill="#CBD5E1" font-size="11">Isolated Guest VM</text>
+                  <circle cx="436" cy="528" r="5" fill="#10B981"/><text x="448" y="532" fill="#CBD5E1" font-size="11">RESTful API & Normalized JSON</text>
+                </svg>
+              </div>
+
+              <!-- Component Inspector Panel -->
+              <div class="card" id="archInspector">
+                <div class="card-header">
+                  <div class="card-title" id="inspectorTitle">Host Machine (Windows Physical)</div>
+                  <span class="badge badge-info" id="inspectorTag">PHYSICAL HOST</span>
+                </div>
+                <p id="inspectorDesc" style="color:var(--text-secondary); margin-bottom:14px;">
+                  Máy tính vật lý chạy hệ điều hành Windows đóng vai trò nền tảng phần cứng (CPU VT-x/AMD-V, RAM) vận hành Oracle VM VirtualBox. Tuyệt đối không thực thi trực tiếp mẫu tệp .EXE nghi ngờ trên lớp này.
+                </p>
+                <div class="kv-grid">
+                  <div class="kv-item">
+                    <div class="k">Vai trò kiến trúc</div>
+                    <div class="v" id="inspectorRole">Hypervisor Host & Analyst Workstation</div>
+                  </div>
+                  <div class="kv-item">
+                    <div class="k">Phân vùng mạng</div>
+                    <div class="v" id="inspectorNet">Isolated from Guest VM Subnet</div>
+                  </div>
+                  <div class="kv-item">
+                    <div class="k">Cơ chế bảo vệ</div>
+                    <div class="v" id="inspectorSec">No Shared Folders / Host-Only Firewall</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mô tả 9 bước luồng hoạt động -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Luồng hoạt động End-to-End (9 Giai đoạn xử lý)</div>
+            </div>
+            <div class="grid-3">
+              <div class="concept-card"><h4>Bước 1–3: Tiếp nhận & Kiểm tra</h4><p>1. Người dùng truy cập Web Dashboard.<br>2. Chọn tệp <span class="mono">.exe</span> cần phân tích.<br>3. Backend kiểm tra định dạng PE, kích thước và tính mã băm.</p></div>
+              <div class="concept-card"><h4>Bước 4–6: Tĩnh & Điều phối Sandbox</h4><p>4. Phân tích tĩnh qua <span class="mono">pefile</span>.<br>5. Gửi tệp tới Cuckoo qua <span class="mono">POST /tasks/create/file</span>.<br>6. Cuckoo nạp snapshot sạch Windows Guest VM.</p></div>
+              <div class="concept-card"><h4>Bước 7–9: Thu thập & Trực quan hóa</h4><p>7. Guest Agent ghi nhận hành vi & xuất JSON.<br>8. Backend chuẩn hóa dữ liệu báo cáo.<br>9. Web Dashboard hiển thị biểu đồ & Timeline SOC.</p></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- TRANG 4: MALWARE ANALYSIS (UPLOAD & EXECUTION PIPELINE)   -->
+        <!-- ========================================================= -->
+        <section class="page-view" id="page-analyze">
+          <div class="grid-2">
+            <!-- Left: Upload & Security Check -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  Tải lên tệp thực thi (.EXE)
+                </div>
+                <span class="mono" style="font-size:11px; color:var(--text-muted)">MAX: 32 MB | PE32/PE32+</span>
+              </div>
+
+              <!-- Security Notice -->
+              <div style="background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.35); border-radius:9px; padding:12px 14px; margin-bottom:16px; font-size:12.5px; color:#FDE68A;">
+                <strong>CẢNH BÁO AN TOÀN HỆ THỐNG:</strong> Trình duyệt chỉ đọc thông tin siêu dữ liệu (tên, kích thước, 2 byte đầu <span class="mono">MZ</span>) và <strong>tuyệt đối không thực thi tệp</strong> trên máy người dùng. Quá trình chạy động chỉ diễn ra trong Windows Guest VM đã được cô lập.
+              </div>
+
+              <!-- Drag & Drop Zone -->
+              <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Kéo thả tệp EXE hoặc nhấn để chọn">
+                <input type="file" id="fileInput" accept=".exe" hidden />
+                <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#22D3EE" stroke-width="1.7" style="margin-bottom:10px">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M9 15l3-3 3 3"/>
+                </svg>
+                <div style="font-size:15px; font-weight:700; color:var(--text-primary)">Kéo & thả tệp <span class="mono" style="color:#22D3EE">.EXE</span> vào đây</div>
+                <div style="color:var(--text-secondary); font-size:12.5px; margin-top:4px">hoặc nhấn <strong>Browse File</strong> để chọn từ máy tính (Giới hạn tối đa 32 MB)</div>
+                <button type="button" class="btn btn-secondary btn-sm" id="browseBtn" style="margin-top:14px">Browse File (.EXE)</button>
+              </div>
+
+              <!-- Selected File Metadata -->
+              <div id="fileInfoBox" style="display:none; margin-top:16px;">
+                <div class="kv-grid">
+                  <div class="kv-item">
+                    <div class="k">Tên tệp (Filename)</div>
+                    <div class="v" id="metaFileName">-</div>
+                  </div>
+                  <div class="kv-item">
+                    <div class="k">Kích thước (File Size)</div>
+                    <div class="v" id="metaFileSize">-</div>
+                  </div>
+                  <div class="kv-item">
+                    <div class="k">Định dạng & Header</div>
+                    <div class="v" id="metaFileFormat">-</div>
+                  </div>
+                  <div class="kv-item">
+                    <div class="k">Trạng thái kiểm tra</div>
+                    <div class="v" id="metaValidationStatus">-</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Backend Connection Warning if Disconnected -->
+              <div id="backendNoticeBox" style="margin-top:16px; padding:12px 14px; border-radius:9px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.35); font-size:12.5px; color:#FCA5A5;">
+                <strong>TRẠNG THÁI BACKEND: NOT CONNECTED (DEMO MODE ĐANG BẬT)</strong><br>
+                Chưa kết nối tới Python FastAPI / Cuckoo Sandbox Server thật. Hệ thống sẽ không giả mạo kết quả quét thật; bạn có thể chạy <strong>Mô phỏng quy trình DEMO (Safe Synthetic Data)</strong> hoặc cấu hình Endpoint Backend thật ở thanh công cụ phía trên.
+              </div>
+
+              <div style="display:flex; gap:10px; margin-top:18px; flex-wrap:wrap;">
+                <button class="btn btn-primary" id="startAnalysisBtn" disabled>
+                  Start Analysis
+                </button>
+                <button class="btn btn-secondary" id="resetUploadBtn" disabled>
+                  Reset
+                </button>
+              </div>
+            </div>
+
+            <!-- Right: 7-Stage Pipeline Progress -->
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                  Tiến trình xử lý Sandbox (7 Giai đoạn)
+                </div>
+                <span class="badge badge-unknown" id="pipelineModeLabel">IDLE</span>
+              </div>
+
+              <div class="step-list" id="analysisSteps">
+                <div class="step-item" data-step="1"><span>1. File Uploaded</span><span class="mono step-status">WAITING</span></div>
+                <div class="step-item" data-step="2"><span>2. Calculating File Hash (MD5/SHA-1/SHA-256)</span><span class="mono step-status">WAITING</span></div>
+                <div class="step-item" data-step="3"><span>3. Static Analysis (pefile PE Header & Entropy)</span><span class="mono step-status">WAITING</span></div>
+                <div class="step-item" data-step="4"><span>4. Submitting to Cuckoo Sandbox (POST /tasks/create/file)</span><span class="mono step-status">WAITING</span></div>
+                <div class="step-item" data-step="5"><span>5. Dynamic Analysis (Windows 10 Guest VM Execution)</span><span class="mono step-status">WAITING</span></div>
+                <div class="step-item" data-step="6"><span>6. Collecting Report (GET /tasks/report/{id})</span><span class="mono step-status">WAITING</span></div>
+                <div class="step-item" data-step="7"><span>7. Analysis Completed</span><span class="mono step-status">WAITING</span></div>
+              </div>
+
+              <div id="analysisCompleteCallout" style="display:none; margin-top:16px; padding:14px; border-radius:10px; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.35);">
+                <div style="font-weight:700; color:#34D399; margin-bottom:4px;">Hoàn tất quy trình trình diễn DEMO!</div>
+                <p style="font-size:12.5px; color:var(--text-secondary); margin-bottom:10px;">
+                  Lưu ý: Dữ liệu dưới đây là <strong>báo cáo giả lập an toàn (DEMO)</strong> được tạo tự động để minh họa giao diện SOC Dashboard, không phải kết quả phân tích mã độc thực tế.
+                </p>
+                <button class="btn btn-primary btn-sm" id="viewCompletedReportBtn">Mở kết quả trên Analysis Dashboard →</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- TRANG 5: ANALYSIS DASHBOARD (SOC MONITORING CENTER)       -->
+        <!-- ========================================================= -->
+        <section class="page-view" id="page-dashboard">
+          <!-- Top Control Bar: Sample Selector & Clear Demo Label -->
+          <div class="card mb-20" style="padding:14px 18px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;">
+              <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <label for="sampleSelector" style="font-weight:600; color:var(--text-secondary);">Phiên phân tích (Task):</label>
+                <select id="sampleSelector" class="select mono"></select>
+              </div>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span class="badge badge-suspicious" id="dashboardSourceBadge">DEMO REPORT (SAFE SYNTHETIC DATA)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- F. ANALYSIS VERDICT BANNER -->
+          <div class="card mb-20" id="verdictBannerCard" style="border-left: 5px solid var(--status-red);">
+            <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+              <div style="flex:1; min-width:260px;">
+                <div style="font-size:11.5px; font-family:var(--font-mono); color:var(--text-muted); text-transform:uppercase;">F. Analysis Verdict & Behavioral Reasoning</div>
+                <div style="display:flex; align-items:center; gap:12px; margin-top:6px;">
+                  <span id="verdictTitle" style="font-size:24px; font-weight:800; letter-spacing:0.04em;">MALICIOUS</span>
+                  <span class="badge badge-malicious" id="verdictBadge">MALSCORE: 8.6 / 10</span>
+                </div>
+                <p id="verdictReason" style="color:var(--text-secondary); margin-top:8px; font-size:13.5px;"></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- C. SANDBOX ANALYSIS METRICS -->
+          <div class="card mb-20">
+            <div class="card-header">
+              <div class="card-title">C. Sandbox Analysis Summary</div>
+              <span class="mono" style="font-size:11.5px; color:var(--accent-cyan-bright)">CUCKOO GUEST VM TELEMETRY</span>
+            </div>
+            <div class="grid-4" id="sandboxMetricsGrid">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+          <!-- A. FILE INFORMATION -->
+          <div class="card mb-20">
+            <div class="card-header">
+              <div class="card-title">A. File Information & Cryptographic Hashes</div>
+              <span class="mono" style="font-size:11px; color:var(--text-muted)">STATIC METADATA</span>
+            </div>
+            <div class="kv-grid" id="fileInfoGrid">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+          <!-- D. BEHAVIOR ANALYTICS (CHART.JS) -->
+          <div class="card mb-20">
+            <div class="card-header">
+              <div class="card-title">D. Behavior Analytics (Chart.js Visualization)</div>
+              <span class="badge badge-suspicious">DEMO METRICS</span>
+            </div>
+            <div class="grid-3">
+              <div style="background:rgba(8,13,24,0.6); border:1px solid rgba(148,163,184,0.1); border-radius:10px; padding:14px;">
+                <div style="font-size:12.5px; font-weight:600; margin-bottom:10px; color:var(--text-secondary);">Dataset Verdict Distribution (DEMO)</div>
+                <div class="chart-box"><canvas id="verdictDoughnutChart"></canvas></div>
+              </div>
+              <div style="background:rgba(8,13,24,0.6); border:1px solid rgba(148,163,184,0.1); border-radius:10px; padding:14px;">
+                <div style="font-size:12.5px; font-weight:600; margin-bottom:10px; color:var(--text-secondary);">API Behavior Categories</div>
+                <div class="chart-box"><canvas id="behaviorBarChart"></canvas></div>
+              </div>
+              <div style="background:rgba(8,13,24,0.6); border:1px solid rgba(148,163,184,0.1); border-radius:10px; padding:14px;">
+                <div style="font-size:12.5px; font-weight:600; margin-bottom:10px; color:var(--text-secondary);">Behavior Events Over Time (0–60s)</div>
+                <div class="chart-box"><canvas id="eventsLineChart"></canvas></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- B. STATIC ANALYSIS (PE HEADER, SECTIONS TABLE & IMPORTED DLLs/APIs) -->
+          <div class="card mb-20">
+            <div class="card-header">
+              <div class="card-title">B. Static Analysis (pefile Inspection)</div>
+              <span class="badge badge-malicious">ENTROPY &gt; 6.8 BITS/BYTE = HIGH RISK ALERT</span>
+            </div>
+
+            <!-- PE Header Summary -->
+            <div class="kv-grid mb-20" id="peHeaderGrid"></div>
+
+            <!-- Sections Search & Table -->
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; flex-wrap:wrap;">
+              <strong style="font-size:13.5px; color:var(--accent-cyan-bright);">PE Sections Table (Nhấn tiêu đề cột để sắp xếp)</strong>
+              <input type="text" id="sectionSearchInput" class="input" placeholder="Tìm theo tên Section (.text, .upx0...)" style="width:260px; max-width:100%;" />
+            </div>
+            <div class="table-wrap mb-20">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="sortable" data-sort="name">Section Name ↕</th>
+                    <th class="sortable" data-sort="virtualAddress">Virtual Address ↕</th>
+                    <th class="sortable" data-sort="virtualSize">Virtual Size ↕</th>
+                    <th class="sortable" data-sort="rawSize">Raw Size ↕</th>
+                    <th class="sortable" data-sort="entropy">Shannon Entropy ↕</th>
+                    <th>Entropy Assessment</th>
+                  </tr>
+                </thead>
+                <tbody id="peSectionsBody"></tbody>
+              </table>
+            </div>
+
+            <!-- Imported DLLs & APIs -->
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; flex-wrap:wrap;">
+              <strong style="font-size:13.5px; color:var(--accent-cyan-bright);">Imported DLLs & Windows APIs (IAT)</strong>
+              <input type="text" id="apiSearchInput" class="input" placeholder="Lọc theo DLL hoặc tên hàm API..." style="width:260px; max-width:100%;" />
+            </div>
+            <div class="grid-2" id="importedDllsGrid"></div>
+          </div>
+
+          <!-- E. BEHAVIOR TIMELINE -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">E. Behavior Timeline (Dòng thời gian hành vi động)</div>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <select id="timelineCategoryFilter" class="select">
+                  <option value="ALL">Tất cả loại hành vi</option>
+                  <option value="Process">Process</option>
+                  <option value="File System">File System</option>
+                  <option value="Registry">Registry</option>
+                  <option value="Network">Network</option>
+                  <option value="Synchronization">Synchronization</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Process Name</th>
+                    <th>Event Type</th>
+                    <th>API Name</th>
+                    <th>Description</th>
+                    <th>Risk Level</th>
+                  </tr>
+                </thead>
+                <tbody id="behaviorTimelineBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- TRANG 6: ANALYSIS HISTORY                                 -->
+        <!-- ========================================================= -->
+        <section class="page-view" id="page-history">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Lịch sử các phiên phân tích (Analysis History)</div>
+              <span class="badge badge-suspicious" id="historyModeBadge">DEMO RECORDS</span>
+            </div>
+
+            <!-- Search, Filter, Sort Controls -->
+            <div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+              <input type="text" id="historySearchInput" class="input" placeholder="Tìm theo Task ID, Filename hoặc SHA-256..." style="flex:1; min-width:220px;" />
+              <select id="historyVerdictFilter" class="select">
+                <option value="ALL">Tất cả Verdict</option>
+                <option value="CLEAN">CLEAN</option>
+                <option value="SUSPICIOUS">SUSPICIOUS</option>
+                <option value="MALICIOUS">MALICIOUS</option>
+              </select>
+              <select id="historySortSelect" class="select">
+                <option value="date-desc">Mới nhất trước</option>
+                <option value="date-asc">Cũ nhất trước</option>
+                <option value="score-desc">Malscore cao → thấp</option>
+                <option value="score-asc">Malscore thấp → cao</option>
+              </select>
+            </div>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Task ID</th>
+                    <th>Filename</th>
+                    <th>SHA-256 (Synthetic/Sample)</th>
+                    <th>Submission Date</th>
+                    <th>Status</th>
+                    <th>Verdict</th>
+                    <th>Malscore</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="historyTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- TRANG 7: SYSTEM INFORMATION                               -->
+        <!-- ========================================================= -->
+        <section class="page-view" id="page-system-info">
+          <!-- Connection Status Matrix -->
+          <div class="card mb-20">
+            <div class="card-header">
+              <div class="card-title">Trạng thái kết nối hạ tầng thực tế (Live Connection Diagnostics)</div>
+              <button class="btn btn-secondary btn-sm" id="checkSystemStatusBtn">Kiểm tra lại kết nối Backend</button>
+            </div>
+            <p style="color:var(--text-secondary); font-size:13px; margin-bottom:14px;">
+              Hệ thống luôn hiển thị trung thực trạng thái kết nối thực tế (<span class="mono">CONNECTED / DISCONNECTED / UNKNOWN</span>), không tự tạo trạng thái kết nối giả khi chưa khởi chạy máy chủ Backend.
+            </p>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Service / Component</th>
+                    <th>Endpoint / Target</th>
+                    <th>Connection Status</th>
+                    <th>Diagnostic Notes</th>
+                  </tr>
+                </thead>
+                <tbody id="systemStatusTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 8 Deployment Environment Cards -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Thông số môi trường triển khai (8 Thành phần hệ thống)</div>
+            </div>
+            <div class="grid-2">
+              <div class="concept-card"><h4>1. Host Machine</h4><p>Máy tính vật lý chạy Windows 10/11 Pro (64-bit), bật ảo hóa phần cứng Intel VT-x / AMD-V, đóng vai trò điều hành Hypervisor và trình duyệt giám sát SOC.</p></div>
+              <div class="concept-card"><h4>2. Oracle VM VirtualBox</h4><p>Phần mềm ảo hóa quản lý 2 máy ảo tách biệt và thiết lập card mạng nội bộ <span class="mono">Host-Only Adapter (vboxnet0)</span> đảm bảo cô lập lưu lượng mã độc.</p></div>
+              <div class="concept-card"><h4>3. Ubuntu Server</h4><p>Máy ảo Linux (Ubuntu 20.04/22.04 LTS) cài đặt lõi Cuckoo Sandbox, MongoDB/PostgreSQL, TCPDump và dịch vụ Python Backend API.</p></div>
+              <div class="concept-card"><h4>4. Cuckoo Sandbox</h4><p>Framework phân tích mã độc tự động điều phối vòng đời máy ảo, thu thập API calls, file dropped, registry changes và lưu lượng PCAP.</p></div>
+              <div class="concept-card"><h4>5. Windows Guest VM</h4><p>Máy ảo Windows 10 (64-bit) tắt Windows Defender/Firewall nội bộ, cài đặt Python và <span class="mono">agent.py</span>, lưu trạng thái sạch qua Snapshot <span class="mono">clean_win10</span>.</p></div>
+              <div class="concept-card"><h4>6. Web Backend</h4><p>Dịch vụ trung gian viết bằng Python FastAPI/Flask thực hiện phân tích tĩnh bằng <span class="mono">pefile</span>, lưu giữ bí mật API Token và chuẩn hóa JSON.</p></div>
+              <div class="concept-card"><h4>7. Frontend</h4><p>Giao diện Web SOC chuẩn HTML5, CSS3, JavaScript ES6+ và Chart.js hoạt động hoàn toàn trên trình duyệt mà không thực thi mã nhị phân.</p></div>
+              <div class="concept-card"><h4>8. API Integration</h4><p>Giao tiếp RESTful API nội bộ giữa Frontend ↔ Backend (<span class="mono">/api/*</span>) và Backend ↔ Cuckoo Sandbox (<span class="mono">/tasks/*</span>) có cơ chế timeout và xác thực Bearer Token phía server.</p></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- TRANG 8: DOCUMENTATION                                    -->
+        <!-- ========================================================= -->
+        <section class="page-view" id="page-docs">
+          <div class="card mb-20">
+            <div class="card-header">
+              <div class="card-title">Tài liệu kỹ thuật & Đặc tả API (Technical Documentation)</div>
+              <button class="btn btn-primary btn-sm" id="openReportModalBtn">Xem Tóm tắt Báo cáo Nghiên cứu (PDF Preview)</button>
+            </div>
+
+            <div class="grid-2 mb-20">
+              <div class="concept-card">
+                <h4>1. Project Introduction & Architecture</h4>
+                <p>Hệ thống phân tách rõ tầng giao diện người dùng (Browser) với tầng xử lý nghiệp vụ (Ubuntu Python Backend) và tầng thực thi nguy hiểm (Windows Guest VM). Mọi tệp tải lên được kiểm tra kích thước, định dạng PE và băm SHA-256 trước khi đưa vào hàng đợi Sandbox.</p>
+              </div>
+              <div class="concept-card">
+                <h4>2. Installation Overview</h4>
+                <p>1. Cấu hình VirtualBox Host-Only Network (<span class="mono">192.168.56.1/24</span>).<br>2. Cài đặt Cuckoo Sandbox & MongoDB trên Ubuntu Server.<br>3. Cài đặt Python + <span class="mono">agent.py</span> trên Windows 10 Guest và tạo Snapshot.<br>4. Khởi chạy FastAPI Backend (<span class="mono">uvicorn main:app --port 8000</span>).</p>
+              </div>
+            </div>
+
+            <!-- API Documentation -->
+            <h4 style="color:var(--accent-cyan-bright); margin-bottom:10px;">3. Đặc tả RESTful API (Internal Backend & Cuckoo Sandbox API)</h4>
+            <div class="table-wrap mb-20">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Layer</th>
+                    <th>Method</th>
+                    <th>Endpoint</th>
+                    <th>Mô tả chức năng & Tham số</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="badge badge-clean">Backend API</span></td>
+                    <td class="mono">POST</td>
+                    <td class="mono">/api/analyze</td>
+                    <td>Nhận tệp <span class="mono">.exe</span> (multipart/form-data), kiểm tra PE, chạy <span class="mono">pefile</span> và đẩy sang Cuckoo.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="badge badge-clean">Backend API</span></td>
+                    <td class="mono">GET</td>
+                    <td class="mono">/api/tasks</td>
+                    <td>Trả về danh sách lịch sử các phiên phân tích đã lưu trong cơ sở dữ liệu.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="badge badge-clean">Backend API</span></td>
+                    <td class="mono">GET</td>
+                    <td class="mono">/api/tasks/{task_id}</td>
+                    <td>Kiểm tra trạng thái hiện tại của tác vụ (pending, running, reported) qua AJAX Polling.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="badge badge-clean">Backend API</span></td>
+                    <td class="mono">GET</td>
+                    <td class="mono">/api/tasks/{task_id}/report</td>
+                    <td>Trả về báo cáo JSON chuẩn hóa gồm Static PE, Sandbox Score, Behavior Timeline.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="badge badge-clean">Backend API</span></td>
+                    <td class="mono">GET</td>
+                    <td class="mono">/api/system/status</td>
+                    <td>Kiểm tra kết nối thực tế tới Cuckoo API, Guest VM và Database.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="badge badge-info">Cuckoo REST</span></td>
+                    <td class="mono">POST</td>
+                    <td class="mono">/tasks/create/file</td>
+                    <td>API gốc của Cuckoo Sandbox tiếp nhận mẫu tệp nhị phân kèm header <span class="mono">Authorization: Bearer &lt;SERVER_TOKEN&gt;</span>.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="badge badge-info">Cuckoo REST</span></td>
+                    <td class="mono">GET</td>
+                    <td class="mono">/tasks/view/{id}</td>
+                    <td>Truy vấn trạng thái máy ảo và tiến trình phân tích của Task ID trong Cuckoo.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="badge badge-info">Cuckoo REST</span></td>
+                    <td class="mono">GET</td>
+                    <td class="mono">/tasks/report/{id}</td>
+                    <td>Trích xuất báo cáo JSON thô từ Cuckoo Sandbox sau khi hoàn tất phân tích động.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="concept-card mb-20">
+              <h4>Lưu ý kỹ thuật tích hợp Cuckoo Sandbox vs CAPE & Bảo mật API Token</h4>
+              <p>
+                • <strong>Phiên bản API:</strong> Cấu trúc endpoint và trường JSON của <em>Cuckoo Sandbox 2.0.x</em> khác với <em>CAPEv2</em> (ví dụ đường dẫn submit và cấu trúc trường <span class="mono">info.score</span> / <span class="mono">malscore</span>). Backend cần kiểm tra phiên bản Cuckoo trước khi ánh xạ dữ liệu.<br>
+                • <strong>Bảo mật Token:</strong> <span class="mono">CUCKOO_API_TOKEN</span> chỉ được lưu trong biến môi trường phía Backend Server (<span class="mono">.env</span>), tuyệt đối không nhúng vào mã JavaScript phía trình duyệt và không mở cổng Cuckoo API ra Internet công cộng.
+              </p>
+            </div>
+
+            <!-- References -->
+            <div class="concept-card">
+              <h4>4. Tài liệu tham khảo (References)</h4>
+              <ul style="color:var(--text-secondary); padding-left:18px; font-size:13px; display:flex; flex-direction:column; gap:5px;">
+                <li>Sikorski, M., &amp; Honig, A. (2012). <em>Practical Malware Analysis: The Hands-On Guide to Dissecting Malicious Software</em>. No Starch Press.</li>
+                <li>Cuckoo Foundation. <em>Cuckoo Sandbox Book — Automated Malware Analysis Documentation &amp; REST API Reference</em>.</li>
+                <li>Microsoft Learn. <em>PE Format Specification — Portable Executable and Common Object File Format</em>.</li>
+                <li>Carrera, E. <em>pefile — Python module to read and work with Portable Executable (PE) files</em>.</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- MODAL 1: BACKEND / DEMO CONFIGURATION -->
+  <div class="modal-backdrop" id="apiConfigModal">
+    <div class="modal-box">
+      <div class="card-header">
+        <div class="card-title">Cấu hình kết nối Backend & Chế độ DEMO</div>
+        <button class="btn btn-secondary btn-sm" data-close-modal="apiConfigModal">✕</button>
+      </div>
+      <p style="color:var(--text-secondary); font-size:13px; margin-bottom:14px;">
+        Nhập địa chỉ Python Backend API (FastAPI/Flask) của bạn để kiểm tra kết nối thật. Nếu chưa triển khai server, hãy bật <strong>Chế độ DEMO</strong> để xem dữ liệu minh họa an toàn.
+      </p>
+      <div style="margin-bottom:14px;">
+        <label style="display:block; font-size:12px; color:var(--text-secondary); margin-bottom:6px;">Backend API Base URL (Không nhập Cuckoo Token tại đây)</label>
+        <input type="text" id="backendUrlInput" class="input mono" style="width:100%;" value="http://127.0.0.1:8000" />
+      </div>
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:12px; border-radius:8px; background:rgba(8,13,24,0.7); border:1px solid var(--border-subtle); margin-bottom:16px;">
+        <div>
+          <strong style="font-size:13px;">Chế độ trình diễn DEMO (Safe Synthetic Data)</strong>
+          <div style="font-size:11.5px; color:var(--text-muted)">Hiển thị dữ liệu mẫu nghiên cứu được gắn nhãn DEMO rõ ràng</div>
+        </div>
+        <input type="checkbox" id="demoModeToggle" checked style="width:18px; height:18px; accent-color:#06B6D4; cursor:pointer;" />
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn btn-secondary" id="testConnectionModalBtn">Test Backend Connection</button>
+        <button class="btn btn-primary" id="saveConfigModalBtn">Lưu cấu hình</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: DELETE CONFIRMATION -->
+  <div class="modal-backdrop" id="deleteConfirmModal">
+    <div class="modal-box" style="max-width:420px;">
+      <div class="card-header">
+        <div class="card-title" style="color:#F87171;">Xác nhận xóa lịch sử phân tích</div>
+        <button class="btn btn-secondary btn-sm" data-close-modal="deleteConfirmModal">✕</button>
+      </div>
+      <p style="color:var(--text-secondary); margin-bottom:18px;">
+        Bạn có chắc chắn muốn xóa bản ghi <strong class="mono" id="deleteTargetLabel" style="color:var(--text-primary)"></strong> khỏi danh sách lịch sử? Thao tác này sẽ cập nhật lại thống kê trên Dashboard.
+      </p>
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <button class="btn btn-secondary" data-close-modal="deleteConfirmModal">Hủy</button>
+        <button class="btn btn-danger" id="confirmDeleteBtn">Xác nhận xóa</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: RESEARCH REPORT VIEWER -->
+  <div class="modal-backdrop" id="reportPreviewModal">
+    <div class="modal-box" style="max-width:720px;">
+      <div class="card-header">
+        <div class="card-title">Báo cáo Nghiên cứu Khoa học (Tóm tắt kỹ thuật)</div>
+        <button class="btn btn-secondary btn-sm" data-close-modal="reportPreviewModal">✕</button>
+      </div>
+      <div style="background:#060A13; border:1px solid var(--border-subtle); border-radius:10px; padding:18px; color:var(--text-secondary); font-size:13px; display:flex; flex-direction:column; gap:12px;">
+        <div style="text-align:center; border-bottom:1px solid rgba(148,163,184,0.15); padding-bottom:12px;">
+          <div class="mono" style="color:#22D3EE; font-size:11px;">BÁO CÁO ĐỀ TÀI NGHIÊN CỨU KHOA HỌC</div>
+          <h3 style="color:#F1F5F9; font-size:16px; margin-top:4px;">NGHIÊN CỨU PHÂN TÍCH TỆP THỰC THI (.EXE) VÀ XÂY DỰNG HỆ THỐNG WEB DASHBOARD GIÁM SÁT HÀNH VI MÃ ĐỘC TÍCH HỢP CUCKOO SANDBOX API</h3>
+        </div>
+        <p><strong>Tóm tắt (Abstract):</strong> Nghiên cứu đề xuất kiến trúc giám sát mã độc tự động kết hợp phân tích tĩnh cấu trúc Portable Executable (PE) và phân tích động hành vi hệ thống thông qua Cuckoo Sandbox. Mô hình triển khai trên hạ tầng ảo hóa Oracle VM VirtualBox gồm máy chủ điều phối Ubuntu Server và môi trường thực thi cô lập Windows 10 Guest VM.</p>
+        <p><strong>Kết quả thực nghiệm kiến trúc:</strong> Hệ thống tách biệt hoàn toàn giữa trình duyệt giám sát SOC, dịch vụ Backend RESTful API và môi trường kích nổ mẫu thử; tự động cảnh báo các phân đoạn mã có độ hỗn loạn Shannon Entropy &gt; 6.8 bits/byte và trực quan hóa chuỗi sự kiện Process, Registry, File System, Network theo thời gian thực.</p>
+      </div>
+      <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+        <button class="btn btn-primary btn-sm" data-close-modal="reportPreviewModal">Đóng tài liệu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST CONTAINER -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- ========================================================= -->
+  <!-- JAVASCRIPT APPLICATION LOGIC                              -->
+  <!-- ========================================================= -->
+  <script>
+    (function () {
+      'use strict';
+
+      /* ---------------------------------------------------------
+         1. SAFE SYNTHETIC DEMO DATASET (NO REAL MALWARE SAMPLES)
+         --------------------------------------------------------- */
+      const INITIAL_DEMO_REPORTS = [
+        {
+          taskId: 'TASK-1042',
+          filename: 'invoice_dropper_sim.exe',
+          fileSize: '428.50 KB (438,784 bytes)',
+          md5: '00000000demo8f9a1c2e4b7d6f3a1101',
+          sha1: '000000000000demo7c8b9a1f2e3d4c5b6a7f8e91',
+          sha256: 'demo0000000000009f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a',
+          imphash: 'demo91a2b3c4d5e6f708192a3b4c5d6e',
+          fileType: 'PE32 executable (GUI) Intel 80386, for MS Windows',
+          architecture: 'x86 (32-bit)',
+          compileTimestamp: '2026-09-14 08:42:19 UTC',
+          submissionDate: '2026-11-20 14:15:08',
+          status: 'REPORTED',
+          verdict: 'MALICIOUS',
+          malscore: 8.6,
+          executionTime: '45.2s',
+          apiCallsCount: 1428,
+          networkEventsCount: 19,
+          processEventsCount: 7,
+          verdictReason: 'Phân đoạn .upx1 có Shannon Entropy đạt 7.84 bits/byte (> 6.8 ngưỡng cảnh báo packer). Trong Sandbox, tiến trình tiêm mã vào explorer.exe qua VirtualAllocEx/WriteProcessMemory, tạo khóa khởi động Run trong Registry và gửi truy vấn C2 tới IP nội bộ giả lập.',
+          peHeader: {
+            entryPoint: '0x00018A40',
+            imageBase: '0x00400000',
+            subsystem: 'IMAGE_SUBSYSTEM_WINDOWS_GUI',
+            sectionsCount: 4,
+            characteristics: 'EXECUTABLE_IMAGE | 32BIT_MACHINE'
+          },
+          sections: [
+            { name: '.text', virtualAddress: '0x00001000', virtualSize: 49152, rawSize: 49152, entropy: 6.32 },
+            { name: '.upx1', virtualAddress: '0x0000D000', virtualSize: 286720, rawSize: 284672, entropy: 7.84 },
+            { name: '.rdata', virtualAddress: '0x00053000', virtualSize: 32768, rawSize: 32768, entropy: 5.41 },
+            { name: '.rsrc', virtualAddress: '0x0005B000', virtualSize: 69632, rawSize: 69632, entropy: 7.12 }
+          ],
+          imports: [
+            { dll: 'KERNEL32.DLL', suspicious: true, apis: ['VirtualAllocEx', 'WriteProcessMemory', 'CreateRemoteThread', 'IsDebuggerPresent', 'GetProcAddress'] },
+            { dll: 'ADVAPI32.DLL', suspicious: true, apis: ['RegOpenKeyExA', 'RegSetValueExA', 'CryptEncrypt'] },
+            { dll: 'WININET.DLL', suspicious: true, apis: ['InternetOpenA', 'InternetConnectA', 'HttpSendRequestA'] },
+            { dll: 'USER32.DLL', suspicious: false, apis: ['MessageBoxA', 'GetAsyncKeyState'] }
+          ],
+          behaviorCategories: {
+            'File System': 312,
+            'Registry': 248,
+            'Process': 185,
+            'Network': 142,
+            'Synchronization': 541
+          },
+          eventsOverTime: [12, 48, 195, 410, 320, 290, 153],
+          timeline: [
+            { time: '00:01.120', process: 'invoice_dropper_sim.exe', type: 'Process', api: 'CreateProcessInternalW', desc: 'Khởi tạo tiến trình con cmd.exe ở chế độ ẩn cửa sổ (SW_HIDE)', risk: 'HIGH' },
+            { time: '00:03.450', process: 'invoice_dropper_sim.exe', type: 'Process', api: 'VirtualAllocEx', desc: 'Cấp phát vùng nhớ PAGE_EXECUTE_READWRITE trong tiến trình đích', risk: 'HIGH' },
+            { time: '00:04.018', process: 'invoice_dropper_sim.exe', type: 'Process', api: 'WriteProcessMemory', desc: 'Ghi shellcode đã giải nén vào vùng nhớ tiến trình từ xa', risk: 'HIGH' },
+            { time: '00:07.890', process: 'invoice_dropper_sim.exe', type: 'File System', api: 'NtCreateFile', desc: 'Tạo tệp thực thi phụ C:\\Users\\Analyst\\AppData\\Local\\Temp\\svchost_upd.exe', risk: 'MEDIUM' },
+            { time: '00:11.305', process: 'svchost_upd.exe', type: 'Registry', api: 'RegSetValueExA', desc: 'Thêm khóa Persistence tại HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', risk: 'HIGH' },
+            { time: '00:18.640', process: 'svchost_upd.exe', type: 'Network', api: 'HttpSendRequestA', desc: 'Gửi HTTP POST beacon tới 192.168.56.101:8080/gate.php (Mạng cô lập)', risk: 'HIGH' },
+            { time: '00:25.100', process: 'svchost_upd.exe', type: 'Synchronization', api: 'CreateMutexW', desc: 'Tạo Mutex toàn cục Global\\SimBotMutex_2026 chống chạy trùng lặp', risk: 'LOW' }
+          ]
+        },
+        {
+          taskId: 'TASK-1041',
+          filename: 'updater_packed_demo.exe',
+          fileSize: '812.00 KB (831,488 bytes)',
+          md5: '00000000demo4c2e1a9f8d7c6b5a4402',
+          sha1: '000000000000demo1a2b3c4d5e6f7a8b9c0d1e22',
+          sha256: 'demo0000000000003c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b',
+          imphash: 'demo44f5e6d7c8b9a0123456789abcde',
+          fileType: 'PE32+ executable (console) x86-64, for MS Windows',
+          architecture: 'x64 (64-bit)',
+          compileTimestamp: '2026-10-02 16:10:04 UTC',
+          submissionDate: '2026-11-19 10:04:32',
+          status: 'REPORTED',
+          verdict: 'SUSPICIOUS',
+          malscore: 5.4,
+          executionTime: '38.0s',
+          apiCallsCount: 684,
+          networkEventsCount: 6,
+          processEventsCount: 3,
+          verdictReason: 'Section .packed có Entropy 6.95 bits/byte (vượt ngưỡng 6.8) và truy vấn thông tin cấu hình hệ thống qua Registry, tuy nhiên không ghi nhận hành vi tiêm mã hoặc mã hóa tệp người dùng.',
+          peHeader: {
+            entryPoint: '0x00004210',
+            imageBase: '0x140000000',
+            subsystem: 'IMAGE_SUBSYSTEM_WINDOWS_CUI',
+            sectionsCount: 4,
+            characteristics: 'EXECUTABLE_IMAGE | LARGE_ADDRESS_AWARE'
+          },
+          sections: [
+            { name: '.text', virtualAddress: '0x00001000', virtualSize: 122880, rawSize: 122880, entropy: 6.18 },
+            { name: '.packed', virtualAddress: '0x00020000', virtualSize: 512000, rawSize: 510976, entropy: 6.95 },
+            { name: '.data', virtualAddress: '0x0009D000', virtualSize: 65536, rawSize: 65536, entropy: 4.85 },
+            { name: '.reloc', virtualAddress: '0x000AD000', virtualSize: 32768, rawSize: 32768, entropy: 5.12 }
+          ],
+          imports: [
+            { dll: 'KERNEL32.DLL', suspicious: false, apis: ['LoadLibraryA', 'GetProcAddress', 'CreateFileW', 'ReadFile'] },
+            { dll: 'ADVAPI32.DLL', suspicious: true, apis: ['RegQueryValueExW', 'OpenProcessToken'] },
+            { dll: 'WS2_32.DLL', suspicious: true, apis: ['WSAStartup', 'connect', 'send'] }
+          ],
+          behaviorCategories: {
+            'File System': 190,
+            'Registry': 164,
+            'Process': 62,
+            'Network': 48,
+            'Synchronization': 220
+          },
+          eventsOverTime: [8, 35, 110, 180, 145, 120, 86],
+          timeline: [
+            { time: '00:01.510', process: 'updater_packed_demo.exe', type: 'Registry', api: 'RegQueryValueExW', desc: 'Đọc phiên bản OS tại HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion', risk: 'LOW' },
+            { time: '00:05.220', process: 'updater_packed_demo.exe', type: 'File System', api: 'CreateFileW', desc: 'Ghi nhật ký kiểm tra cập nhật vào %TEMP%\\update_check.log', risk: 'LOW' },
+            { time: '00:12.400', process: 'updater_packed_demo.exe', type: 'Network', api: 'connect', desc: 'Thử kết nối TCP tới cổng 443 (bị chặn bởi môi trường mạng cô lập)', risk: 'MEDIUM' },
+            { time: '00:19.015', process: 'updater_packed_demo.exe', type: 'Synchronization', api: 'CreateEventW', desc: 'Đồng bộ luồng kiểm tra trạng thái tải xuống', risk: 'LOW' }
+          ]
+        },
+        {
+          taskId: 'TASK-1040',
+          filename: 'calc_helper_clean.exe',
+          fileSize: '156.00 KB (159,744 bytes)',
+          md5: '00000000demo9b8a7f6e5d4c3b2a1103',
+          sha1: '000000000000demo9f8e7d6c5b4a3f2e1d0c9b83',
+          sha256: 'demo000000000000112233445566778899aabbccddeeff001122334455667788',
+          imphash: 'demo112233445566778899aabbccddee',
+          fileType: 'PE32+ executable (GUI) x86-64, for MS Windows',
+          architecture: 'x64 (64-bit)',
+          compileTimestamp: '2026-08-21 11:20:45 UTC',
+          submissionDate: '2026-11-18 16:40:11',
+          status: 'REPORTED',
+          verdict: 'CLEAN',
+          malscore: 0.4,
+          executionTime: '22.5s',
+          apiCallsCount: 245,
+          networkEventsCount: 0,
+          processEventsCount: 1,
+          verdictReason: 'Tất cả các phân đoạn PE có mức Shannon Entropy bình thường (< 6.2 bits/byte), không có hành vi tạo tiến trình lạ, không chỉnh sửa khóa tự khởi động Registry và không phát sinh kết nối mạng đáng ngờ.',
+          peHeader: {
+            entryPoint: '0x00001500',
+            imageBase: '0x140000000',
+            subsystem: 'IMAGE_SUBSYSTEM_WINDOWS_GUI',
+            sectionsCount: 3,
+            characteristics: 'EXECUTABLE_IMAGE | LARGE_ADDRESS_AWARE'
+          },
+          sections: [
+            { name: '.text', virtualAddress: '0x00001000', virtualSize: 65536, rawSize: 65536, entropy: 5.88 },
+            { name: '.rdata', virtualAddress: '0x00011000', virtualSize: 32768, rawSize: 32768, entropy: 4.92 },
+            { name: '.data', virtualAddress: '0x00019000', virtualSize: 16384, rawSize: 16384, entropy: 3.45 }
+          ],
+          imports: [
+            { dll: 'KERNEL32.DLL', suspicious: false, apis: ['GetModuleHandleW', 'ExitProcess', 'GetSystemTimeAsFileTime'] },
+            { dll: 'USER32.DLL', suspicious: false, apis: ['CreateWindowExW', 'ShowWindow', 'DispatchMessageW'] },
+            { dll: 'GDI32.DLL', suspicious: false, apis: ['BeginPaint', 'EndPaint', 'TextOutW'] }
+          ],
+          behaviorCategories: {
+            'File System': 42,
+            'Registry': 28,
+            'Process': 12,
+            'Network': 0,
+            'Synchronization': 163
+          },
+          eventsOverTime: [5, 22, 45, 60, 52, 41, 20],
+          timeline: [
+            { time: '00:00.840', process: 'calc_helper_clean.exe', type: 'Process', api: 'GetCommandLineW', desc: 'Khởi chạy ứng dụng giao diện chuẩn của người dùng', risk: 'LOW' },
+            { time: '00:02.110', process: 'calc_helper_clean.exe', type: 'File System', api: 'NtReadFile', desc: 'Nạp tài nguyên giao diện chuẩn từ thư mục hệ thống System32', risk: 'LOW' },
+            { time: '00:05.600', process: 'calc_helper_clean.exe', type: 'Synchronization', api: 'MsgWaitForMultipleObjects', desc: 'Vòng lặp chờ sự kiện giao diện người dùng (UI Idle)', risk: 'LOW' }
+          ]
+        }
+      ];
+
+      /* ---------------------------------------------------------
+         2. APPLICATION STATE
+         --------------------------------------------------------- */
+      const state = {
+        demoMode: true,
+        backendUrl: 'http://127.0.0.1:8000',
+        backendConnected: false,
+        systemStatus: {
+          webServer: 'CONNECTED',
+          backendApi: 'DISCONNECTED',
+          cuckooApi: 'UNKNOWN',
+          guestVm: 'UNKNOWN',
+          database: 'UNKNOWN'
+        },
+        reports: JSON.parse(JSON.stringify(INITIAL_DEMO_REPORTS)),
+        selectedTaskId: 'TASK-1042',
+        sectionSort: { key: 'entropy', dir: 'desc' },
+        selectedFile: null,
+        pendingDeleteId: null,
+        charts: {
+          doughnut: null,
+          bar: null,
+          line: null
+        }
+      };
+
+      /* ---------------------------------------------------------
+         3. UTILITY & TOAST HELPERS
+         --------------------------------------------------------- */
+      function showToast(message, type = 'info') {
+        const container = document.getElementById('toastContainer');
+        const el = document.createElement('div');
+        el.className = `toast ${type}`;
+        el.textContent = message;
+        container.appendChild(el);
+        setTimeout(() => {
+          el.style.opacity = '0';
+          el.style.transform = 'translateY(6px)';
+          el.style.transition = 'all 0.2s ease';
+          setTimeout(() => el.remove(), 220);
+        }, 3500);
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      /* ---------------------------------------------------------
+         4. NAVIGATION & ROUTING (ALL 8 PAGES)
+         --------------------------------------------------------- */
+      const PAGE_META = {
+        'overview': { kicker: 'SCIENTIFIC RESEARCH PLATFORM', title: '1. Overview & Project Summary' },
+        'project-info': { kicker: 'THEORETICAL FOUNDATION', title: '2. Project Information & Malware Concepts' },
+        'architecture': { kicker: 'VIRTUALIZED SOC INFRASTRUCTURE', title: '3. Interactive System Architecture' },
+        'analyze': { kicker: 'ISOLATED SANDBOX SUBMISSION', title: '4. Malware Analysis (.EXE Submission)' },
+        'dashboard': { kicker: 'BEHAVIORAL TELEMETRY CENTER', title: '5. SOC Analysis Dashboard' },
+        'history': { kicker: 'AUDIT & ARCHIVE REPOSITORY', title: '6. Analysis History' },
+        'system-info': { kicker: 'DEPLOYMENT & DIAGNOSTICS', title: '7. System Information & Health' },
+        'docs': { kicker: 'API & RESEARCH SPECIFICATION', title: '8. Technical Documentation' }
+      };
+
+      function navigateTo(pageId) {
+        if (!PAGE_META[pageId]) return;
+
+        document.querySelectorAll('.page-view').forEach(sec => sec.classList.remove('active'));
+        const target = document.getElementById(`page-${pageId}`);
+        if (target) target.classList.add('active');
+
+        document.querySelectorAll('.nav-item').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.page === pageId);
+        });
+
+        document.getElementById('headerKicker').textContent = PAGE_META[pageId].kicker;
+        document.getElementById('headerTitle').textContent = PAGE_META[pageId].title;
+
+        // Close mobile sidebar
+        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('sidebarOverlay').classList.remove('open');
+
+        if (pageId === 'dashboard') {
+          renderDashboard();
+        } else if (pageId === 'history') {
+          renderHistoryTable();
+        } else if (pageId === 'system-info') {
+          renderSystemStatusTable();
+        } else if (pageId === 'overview') {
+          updateOverviewStats();
+        }
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      document.querySelectorAll('.nav-item').forEach(btn => {
+        btn.addEventListener('click', () => navigateTo(btn.dataset.page));
+      });
+
+      document.querySelectorAll('[data-nav]').forEach(btn => {
+        btn.addEventListener('click', () => navigateTo(btn.dataset.nav));
+      });
+
+      // Mobile menu
+      document.getElementById('mobileMenuBtn').addEventListener('click', () => {
+        document.getElementById('sidebar').classList.add('open');
+        document.getElementById('sidebarOverlay').classList.add('open');
+      });
+
+      document.getElementById('sidebarOverlay').addEventListener('click', () => {
+        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('sidebarOverlay').classList.remove('open');
+      });
+
+      /* ---------------------------------------------------------
+         5. MODE & BACKEND CONNECTION CHECKER (HONEST STATUS)
+         --------------------------------------------------------- */
+      function updateGlobalModeUI() {
+        const badge = document.getElementById('globalModeBadge');
+        const statsBadge = document.getElementById('overviewStatsBadge');
+        const noticeBox = document.getElementById('backendNoticeBox');
+
+        if (state.backendConnected) {
+          badge.className = 'mode-badge connected';
+          badge.textContent = '● BACKEND CONNECTED (LIVE API)';
+          statsBadge.className = 'badge badge-clean';
+          statsBadge.textContent = 'LIVE BACKEND DATA';
+          noticeBox.style.background = 'rgba(16,185,129,0.1)';
+          noticeBox.style.borderColor = 'rgba(16,185,129,0.35)';
+          noticeBox.style.color = '#6EE7B7';
+          noticeBox.innerHTML = `<strong>BACKEND CONNECTED:</strong> Đã kết nối tới <span class="mono">${escapeHtml(state.backendUrl)}</span>. Tệp tải lên sẽ được gửi qua REST API tới Cuckoo Sandbox.`;
+        } else if (state.demoMode) {
+          badge.className = 'mode-badge demo';
+          badge.textContent = '● DEMO MODE (SAFE SYNTHETIC DATA)';
+          statsBadge.className = 'badge badge-suspicious';
+          statsBadge.textContent = 'DEMO DATA (DỮ LIỆU MINH HỌA AN TOÀN)';
+          noticeBox.style.background = 'rgba(245,158,11,0.1)';
+          noticeBox.style.borderColor = 'rgba(245,158,11,0.35)';
+          noticeBox.style.color = '#FDE68A';
+          noticeBox.innerHTML = `<strong>BACKEND: NOT CONNECTED — ĐANG BẬT CHẾ ĐỘ DEMO:</strong> Chưa kết nối tới Python FastAPI / Cuckoo Sandbox thật. Khi nhấn <em>Start Analysis</em>, hệ thống sẽ chạy mô phỏng minh họa bằng dữ liệu giả lập an toàn (không phải quét mã độc thật).`;
+        } else {
+          badge.className = 'mode-badge disconnected';
+          badge.textContent = '● BACKEND: NOT CONNECTED';
+          statsBadge.className = 'badge badge-malicious';
+          statsBadge.textContent = 'NOT CONNECTED (0 REAL RECORDS)';
+          noticeBox.style.background = 'rgba(239,68,68,0.1)';
+          noticeBox.style.borderColor = 'rgba(239,68,68,0.35)';
+          noticeBox.style.color = '#FCA5A5';
+          noticeBox.innerHTML = `<strong>BACKEND: NOT CONNECTED (DEMO MODE ĐANG TẮT):</strong> Không thể gửi tệp phân tích khi chưa kết nối tới Backend API và tắt chế độ DEMO. Vui lòng khởi chạy FastAPI server hoặc bật lại chế độ DEMO.`;
+        }
+        updateOverviewStats();
+      }
+
+      async function checkRealBackendConnection(silent = false) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2500);
+        try {
+          const res = await fetch(`${state.backendUrl.replace(/\/$/, '')}/api/system/status`, {
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const data = await res.json();
+          state.backendConnected = true;
+          state.systemStatus = {
+            webServer: 'CONNECTED',
+            backendApi: 'CONNECTED',
+            cuckooApi: data.cuckoo_api || 'UNKNOWN',
+            guestVm: data.guest_vm || 'UNKNOWN',
+            database: data.database || 'UNKNOWN'
+          };
+          if (!silent) showToast('Kết nối thành công tới Python Backend API!', 'success');
+        } catch (err) {
+          clearTimeout(timeoutId);
+          state.backendConnected = false;
+          state.systemStatus = {
+            webServer: 'CONNECTED',
+            backendApi: 'DISCONNECTED',
+            cuckooApi: 'UNKNOWN',
+            guestVm: 'UNKNOWN',
+            database: 'UNKNOWN'
+          };
+          if (!silent) {
+            showToast('Không tìm thấy Backend API tại ' + state.backendUrl + ' (Trạng thái: DISCONNECTED)', 'warn');
+          }
+        }
+        updateGlobalModeUI();
+        renderSystemStatusTable();
+      }
+
+      /* ---------------------------------------------------------
+         6. PAGE 1: OVERVIEW STATISTICS
+         --------------------------------------------------------- */
+      function updateOverviewStats() {
+        const activeList = (state.backendConnected || state.demoMode) ? state.reports : [];
+        const total = activeList.length;
+        const clean = activeList.filter(r => r.verdict === 'CLEAN').length;
+        const susp = activeList.filter(r => r.verdict === 'SUSPICIOUS').length;
+        const mal = activeList.filter(r => r.verdict === 'MALICIOUS').length;
+
+        document.getElementById('statTotal').textContent = total;
+        document.getElementById('statClean').textContent = clean;
+        document.getElementById('statSuspicious').textContent = susp;
+        document.getElementById('statMalicious').textContent = mal;
+      }
+
+      /* ---------------------------------------------------------
+         7. PAGE 3: INTERACTIVE ARCHITECTURE INSPECTOR
+         --------------------------------------------------------- */
+      const ARCH_NODES = {
+        host: {
+          title: 'Host Machine (Windows Physical)',
+          tag: 'PHYSICAL HOST',
+          desc: 'Máy tính vật lý chạy hệ điều hành Windows đóng vai trò nền tảng phần cứng (CPU VT-x/AMD-V, RAM) vận hành Oracle VM VirtualBox. Tuyệt đối không thực thi trực tiếp mẫu tệp .EXE nghi ngờ trên lớp này.',
+          role: 'Hypervisor Host & Analyst Workstation',
+          net: 'Isolated from Guest VM Subnet',
+          sec: 'No Shared Folders / Host-Only Firewall'
+        },
+        virtualbox: {
+          title: 'Oracle VM VirtualBox (Hypervisor)',
+          tag: 'VIRTUALIZATION',
+          desc: 'Trình quản lý máy ảo Type-2 tạo ranh giới cô lập phần cứng và quản lý mạng nội bộ Host-Only (192.168.56.0/24) kết nối giữa Ubuntu Server và Windows Guest VM.',
+          role: 'VM Lifecycle & Snapshot Controller',
+          net: 'vboxnet0 Host-Only Network',
+          sec: 'NAT Disabled during Malware Execution'
+        },
+        cuckoo: {
+          title: 'Cuckoo Sandbox Engine (Ubuntu Server)',
+          tag: 'SANDBOX CORE',
+          desc: 'Thành phần lõi trên Ubuntu Server nhận mẫu từ REST API, ra lệnh cho VirtualBox khôi phục snapshot sạch của Windows Guest, gửi tệp qua Cuckoo Agent và thu thập báo cáo hành vi.',
+          role: 'Dynamic Analysis Orchestrator',
+          net: 'Internal Cuckoo API (127.0.0.1:8090)',
+          sec: 'Never Exposed Directly to Public Internet'
+        },
+        backend: {
+          title: 'Python Backend API (FastAPI / Flask)',
+          tag: 'MIDDLEWARE API',
+          desc: 'Dịch vụ trung gian viết bằng Python thực hiện kiểm tra tệp, phân tích tĩnh bằng thư viện pefile, lưu giữ CUCKOO_API_TOKEN bí mật phía server và chuẩn hóa JSON trả về cho Web Dashboard.',
+          role: 'Static Analyzer & API Gateway',
+          net: 'RESTful JSON (/api/analyze, /api/tasks)',
+          sec: 'Token Hidden in Server .env / Size Limit'
+        },
+        agent: {
+          title: 'Cuckoo Agent (Windows Guest VM)',
+          tag: 'GUEST AGENT',
+          desc: 'Tiến trình Python (agent.py) chạy nền bên trong máy ảo Windows 10 Guest, lắng nghe lệnh từ Cuckoo Host để nhận tệp .EXE, kích hoạt thực thi và gửi log về máy chủ.',
+          role: 'In-Guest Execution Controller',
+          net: '192.168.56.101:8000 (Host-Only)',
+          sec: 'Reverted to Clean Snapshot Post-Run'
+        },
+        monitoring: {
+          title: 'Behavior Monitoring & API Hooking',
+          tag: 'TELEMETRY',
+          desc: 'Module giám sát hành vi mức nhân và user-mode bên trong Windows Guest VM, ghi nhận mọi lệnh gọi Windows API, tiến trình con, khóa Registry, tệp tạo mới và gói tin mạng.',
+          role: 'Process, File, Registry & Network Tracer',
+          net: 'TCPDump / In-Memory Telemetry Stream',
+          sec: 'Anti-Analysis Mitigation & Evasion Logging'
+        },
+        'dashboard-node': {
+          title: 'Web Dashboard (HTML5 / CSS3 / JS / Chart.js)',
+          tag: 'SOC FRONTEND',
+          desc: 'Giao diện giám sát SOC hiển thị thông tin tệp, bảng PE Sections (cảnh báo Entropy > 6.8), biểu đồ trực quan Chart.js và Behavior Timeline có bộ lọc tương tác.',
+          role: 'Security Operations Visualization UI',
+          net: 'Consumes Backend REST JSON',
+          sec: 'Static DOM Rendering (Zero Binary Exec)'
+        },
+        browser: {
+          title: 'Analyst Web Browser',
+          tag: 'CLIENT VIEW',
+          desc: 'Trình duyệt của nghiên cứu viên dùng để tải tệp mẫu lên hệ thống và theo dõi báo cáo phân tích. Mọi tệp chọn từ trình duyệt chỉ được đọc header kiểm tra hợp lệ, không bao giờ chạy tại client.',
+          role: 'Human-in-the-Loop Monitoring Client',
+          net: 'HTTPS / Localhost Dashboard Session',
+          sec: 'Sandboxed Browser Context'
+        }
+      };
+
+      document.querySelectorAll('.arch-node').forEach(node => {
+        node.addEventListener('click', () => {
+          document.querySelectorAll('.arch-node').forEach(n => n.classList.remove('selected'));
+          node.classList.add('selected');
+          const info = ARCH_NODES[node.dataset.node];
+          if (!info) return;
+          document.getElementById('inspectorTitle').textContent = info.title;
+          document.getElementById('inspectorTag').textContent = info.tag;
+          document.getElementById('inspectorDesc').textContent = info.desc;
+          document.getElementById('inspectorRole').textContent = info.role;
+          document.getElementById('inspectorNet').textContent = info.net;
+          document.getElementById('inspectorSec').textContent = info.sec;
+        });
+      });
+
+      /* ---------------------------------------------------------
+         8. PAGE 4: MALWARE ANALYSIS UPLOAD & VALIDATION
+         --------------------------------------------------------- */
+      const MAX_FILE_BYTES = 32 * 1024 * 1024; // 32 MB
+      const dropzone = document.getElementById('dropzone');
+      const fileInput = document.getElementById('fileInput');
+      const startAnalysisBtn = document.getElementById('startAnalysisBtn');
+      const resetUploadBtn = document.getElementById('resetUploadBtn');
+
+      function resetPipelineUI() {
+        document.querySelectorAll('#analysisSteps .step-item').forEach(item => {
+          item.classList.remove('active', 'done');
+          item.querySelector('.step-status').textContent = 'WAITING';
+        });
+        document.getElementById('pipelineModeLabel').className = 'badge badge-unknown';
+        document.getElementById('pipelineModeLabel').textContent = 'IDLE';
+        document.getElementById('analysisCompleteCallout').style.display = 'none';
+      }
+
+      function handleSelectedFile(file) {
+        if (!file) return;
+        resetPipelineUI();
+
+        const fileName = file.name;
+        const extValid = fileName.toLowerCase().endsWith('.exe');
+        const sizeValid = file.size > 0 && file.size <= MAX_FILE_BYTES;
+        const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+
+        document.getElementById('fileInfoBox').style.display = 'block';
+        document.getElementById('metaFileName').textContent = fileName;
+        document.getElementById('metaFileSize').textContent = `${file.size.toLocaleString()} bytes (${sizeMB} MB)`;
+
+        if (!extValid) {
+          document.getElementById('metaFileFormat').textContent = 'KHÔNG HỢP LỆ (Chỉ chấp nhận .EXE)';
+          document.getElementById('metaValidationStatus').innerHTML = '<span style="color:#F87171">REJECTED: Sai định dạng tệp</span>';
+          startAnalysisBtn.disabled = true;
+          resetUploadBtn.disabled = false;
+          state.selectedFile = null;
+          showToast('Từ chối tệp: Hệ thống chỉ chấp nhận định dạng thực thi .EXE!', 'error');
+          return;
+        }
+
+        if (!sizeValid) {
+          document.getElementById('metaFileFormat').textContent = 'Windows Executable (.EXE)';
+          document.getElementById('metaValidationStatus').innerHTML = '<span style="color:#F87171">REJECTED: Vượt quá giới hạn 32 MB</span>';
+          startAnalysisBtn.disabled = true;
+          resetUploadBtn.disabled = false;
+          state.selectedFile = null;
+          showToast('Từ chối tệp: Dung lượng vượt quá giới hạn an toàn 32 MB!', 'error');
+          return;
+        }
+
+        // Safely inspect first 2 bytes (MZ header) without executing anything
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          const arr = new Uint8Array(e.target.result);
+          const hasMZ = arr.length >= 2 && arr[0] === 0x4D && arr[1] === 0x5A;
+          document.getElementById('metaFileFormat').textContent = hasMZ
+            ? 'Windows PE Executable (.EXE | Header: 0x4D5A "MZ")'
+            : 'Extension .EXE (Cảnh báo: Không thấy chữ ký DOS MZ)';
+          document.getElementById('metaValidationStatus').innerHTML = hasMZ
+            ? '<span style="color:#34D399">VALIDATED — Sẵn sàng gửi cô lập</span>'
+            : '<span style="color:#FBBF24">WARNING — Thiếu chữ ký PE MZ chuẩn</span>';
+
+          state.selectedFile = file;
+          startAnalysisBtn.disabled = false;
+          resetUploadBtn.disabled = false;
+          showToast(`Đã kiểm tra tệp "${fileName}" an toàn (chưa thực thi).`, 'success');
+        };
+        reader.readAsArrayBuffer(file.slice(0, 4));
+      }
+
+      document.getElementById('browseBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        fileInput.click();
+      });
+
+      dropzone.addEventListener('click', () => fileInput.click());
+      dropzone.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          fileInput.click();
+        }
+      });
+
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) handleSelectedFile(e.target.files[0]);
+      });
+
+      dropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropzone.classList.add('dragover');
+      });
+
+      dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+
+      dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          handleSelectedFile(e.dataTransfer.files[0]);
+        }
+      });
+
+      resetUploadBtn.addEventListener('click', () => {
+        state.selectedFile = null;
+        fileInput.value = '';
+        document.getElementById('fileInfoBox').style.display = 'none';
+        startAnalysisBtn.disabled = true;
+        resetUploadBtn.disabled = true;
+        resetPipelineUI();
+      });
+
+      startAnalysisBtn.addEventListener('click', async () => {
+        if (!state.selectedFile) return;
+
+        if (!state.backendConnected && !state.demoMode) {
+          showToast('Backend chưa kết nối và Chế độ DEMO đang tắt. Không thể thực hiện phân tích!', 'error');
+          return;
+        }
+
+        startAnalysisBtn.disabled = true;
+        resetUploadBtn.disabled = true;
+        resetPipelineUI();
+
+        const modeLabel = document.getElementById('pipelineModeLabel');
+        if (state.backendConnected) {
+          modeLabel.className = 'badge badge-clean';
+          modeLabel.textContent = 'LIVE SANDBOX RUNNING';
+        } else {
+          modeLabel.className = 'badge badge-suspicious';
+          modeLabel.textContent = 'DEMO SIMULATION (NOT REAL SCAN)';
+        }
+
+        const steps = Array.from(document.querySelectorAll('#analysisSteps .step-item'));
+        for (let i = 0; i < steps.length; i++) {
+          steps[i].classList.add('active');
+          steps[i].querySelector('.step-status').textContent = state.backendConnected ? 'PROCESSING...' : 'DEMO STEP...';
+          await new Promise(r => setTimeout(r, 420));
+          steps[i].classList.remove('active');
+          steps[i].classList.add('done');
+          steps[i].querySelector('.step-status').textContent = 'DONE';
+        }
+
+        // Create a clearly marked DEMO report entry for the uploaded filename
+        const newId = 'TASK-' + (1043 + state.reports.length);
+        const nowStr = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        const fName = state.selectedFile.name;
+        const fSizeStr = `${(state.selectedFile.size / 1024).toFixed(2)} KB (${state.selectedFile.size.toLocaleString()} bytes)`;
+
+        const syntheticReport = {
+          taskId: newId,
+          filename: fName,
+          fileSize: fSizeStr,
+          md5: 'demo0000' + Math.random().toString(16).slice(2, 26).padEnd(24, '0'),
+          sha1: 'demo00000000' + Math.random().toString(16).slice(2, 30).padEnd(28, '0'),
+          sha256: 'demo000000000000' + Math.random().toString(16).slice(2, 50).padEnd(48, '0'),
+          imphash: 'demo' + Math.random().toString(16).slice(2, 30).padEnd(28, '0'),
+          fileType: 'PE32+ executable (GUI) x86-64, for MS Windows [DEMO ENTRY]',
+          architecture: 'x64 (64-bit)',
+          compileTimestamp: nowStr + ' UTC',
+          submissionDate: nowStr,
+          status: 'DEMO_REPORTED',
+          verdict: 'SUSPICIOUS',
+          malscore: 6.2,
+          executionTime: '31.4s (Simulated)',
+          apiCallsCount: 512,
+          networkEventsCount: 4,
+          processEventsCount: 2,
+          verdictReason: `[BÁO CÁO DEMO GIẢ LẬP AN TOÀN CHO TỆP "${fName}"] — Chưa kết nối Cuckoo Sandbox thật. Dữ liệu PE và hành vi dưới đây được sinh mẫu nhằm trình diễn giao diện phân tích SOC.`,
+          peHeader: {
+            entryPoint: '0x00002400',
+            imageBase: '0x140000000',
+            subsystem: 'IMAGE_SUBSYSTEM_WINDOWS_GUI',
+            sectionsCount: 4,
+            characteristics: 'EXECUTABLE_IMAGE | LARGE_ADDRESS_AWARE'
+          },
+          sections: [
+            { name: '.text', virtualAddress: '0x00001000', virtualSize: 81920, rawSize: 81920, entropy: 6.24 },
+            { name: '.stub', virtualAddress: '0x00015000', virtualSize: 131072, rawSize: 131072, entropy: 7.04 },
+            { name: '.rdata', virtualAddress: '0x00035000', virtualSize: 24576, rawSize: 24576, entropy: 5.10 },
+            { name: '.rsrc', virtualAddress: '0x0003B000', virtualSize: 16384, rawSize: 16384, entropy: 4.75 }
+          ],
+          imports: [
+            { dll: 'KERNEL32.DLL', suspicious: false, apis: ['GetCurrentProcessId', 'VirtualAlloc', 'CreateFileW'] },
+            { dll: 'ADVAPI32.DLL', suspicious: true, apis: ['RegOpenKeyExW', 'RegQueryValueExW'] },
+            { dll: 'WINHTTP.DLL', suspicious: true, apis: ['WinHttpOpen', 'WinHttpConnect'] }
+          ],
+          behaviorCategories: {
+            'File System': 140,
+            'Registry': 115,
+            'Process': 45,
+            'Network': 32,
+            'Synchronization': 180
+          },
+          eventsOverTime: [10, 42, 95, 130, 110, 80, 45],
+          timeline: [
+            { time: '00:01.050', process: fName, type: 'Process', api: 'CreateProcessW', desc: '[DEMO] Khởi tạo tiến trình trong Windows Guest VM cô lập', risk: 'LOW' },
+            { time: '00:04.310', process: fName, type: 'Registry', api: 'RegQueryValueExW', desc: '[DEMO] Truy vấn thông tin cấu hình hệ thống Windows', risk: 'MEDIUM' },
+            { time: '00:09.820', process: fName, type: 'Network', api: 'WinHttpConnect', desc: '[DEMO] Gửi yêu cầu kết nối thử nghiệm trong mạng Host-Only', risk: 'MEDIUM' }
+          ]
+        };
+
+        state.reports.unshift(syntheticReport);
+        state.selectedTaskId = newId;
+        updateOverviewStats();
+
+        document.getElementById('analysisCompleteCallout').style.display = 'block';
+        resetUploadBtn.disabled = false;
+        showToast('Hoàn tất mô phỏng DEMO! Nhấn để xem báo cáo trên Dashboard.', 'success');
+      });
+
+      document.getElementById('viewCompletedReportBtn').addEventListener('click', () => {
+        navigateTo('dashboard');
+      });
+
+      /* ---------------------------------------------------------
+         9. PAGE 5: ANALYSIS DASHBOARD & CHART.JS
+         --------------------------------------------------------- */
+      function getCurrentReport() {
+        if (state.reports.length === 0) return null;
+        return state.reports.find(r => r.taskId === state.selectedTaskId) || state.reports[0];
+      }
+
+      function renderDashboard() {
+        const selector = document.getElementById('sampleSelector');
+        selector.innerHTML = state.reports.map(r =>
+          `<option value="${escapeHtml(r.taskId)}" ${r.taskId === state.selectedTaskId ? 'selected' : ''}>${escapeHtml(r.taskId)} — ${escapeHtml(r.filename)} [${escapeHtml(r.verdict)}]</option>`
+        ).join('');
+
+        const report = getCurrentReport();
+        if (!report) {
+          document.getElementById('verdictTitle').textContent = 'NO DATA';
+          document.getElementById('verdictReason').textContent = 'Chưa có báo cáo phân tích nào trong hệ thống.';
+          return;
+        }
+
+        state.selectedTaskId = report.taskId;
+
+        // Verdict Banner (F)
+        const banner = document.getElementById('verdictBannerCard');
+        const vTitle = document.getElementById('verdictTitle');
+        const vBadge = document.getElementById('verdictBadge');
+        vTitle.textContent = report.verdict;
+        vBadge.textContent = `MALSCORE: ${report.malscore.toFixed(1)} / 10`;
+
+        if (report.verdict === 'CLEAN') {
+          banner.style.borderLeftColor = '#10B981';
+          vTitle.style.color = '#34D399';
+          vBadge.className = 'badge badge-clean';
+        } else if (report.verdict === 'SUSPICIOUS') {
+          banner.style.borderLeftColor = '#F59E0B';
+          vTitle.style.color = '#FBBF24';
+          vBadge.className = 'badge badge-suspicious';
+        } else {
+          banner.style.borderLeftColor = '#EF4444';
+          vTitle.style.color = '#F87171';
+          vBadge.className = 'badge badge-malicious';
+        }
+        document.getElementById('verdictReason').textContent = report.verdictReason;
+
+        // Sandbox Metrics (C)
+        document.getElementById('sandboxMetricsGrid').innerHTML = `
+          <div class="stat-card"><div class="stat-label">Task ID & Status</div><div class="stat-value" style="font-size:20px;color:#22D3EE">${escapeHtml(report.taskId)}</div><small style="color:#34D399">${escapeHtml(report.status)}</small></div>
+          <div class="stat-card"><div class="stat-label">Execution Time & Malscore</div><div class="stat-value" style="font-size:20px;color:#FBBF24">${report.malscore.toFixed(1)} / 10</div><small style="color:var(--text-secondary)">Duration: ${escapeHtml(report.executionTime)}</small></div>
+          <div class="stat-card"><div class="stat-label">Total API Calls</div><div class="stat-value" style="font-size:20px;color:#F1F5F9">${report.apiCallsCount.toLocaleString()}</div><small style="color:var(--text-secondary)">Hooked Windows APIs</small></div>
+          <div class="stat-card"><div class="stat-label">Process / Network Events</div><div class="stat-value" style="font-size:20px;color:#60A5FA">${report.processEventsCount} Proc / ${report.networkEventsCount} Net</div><small style="color:var(--text-secondary)">Dynamic Telemetry</small></div>
+        `;
+
+        // File Info (A)
+        const fileFields = [
+          ['Filename', report.filename],
+          ['File Size', report.fileSize],
+          ['File Type', report.fileType],
+          ['Architecture', report.architecture],
+          ['Compile Timestamp', report.compileTimestamp],
+          ['ImpHash', report.imphash],
+          ['MD5', report.md5],
+          ['SHA-1', report.sha1],
+          ['SHA-256', report.sha256]
+        ];
+        document.getElementById('fileInfoGrid').innerHTML = fileFields.map(([k, v]) => `
+          <div class="kv-item">
+            <div class="k">${escapeHtml(k)}</div>
+            <div class="v">${escapeHtml(v)}</div>
+          </div>
+        `).join('');
+
+        // PE Header (B1)
+        const peFields = [
+          ['Entry Point', report.peHeader.entryPoint],
+          ['Image Base', report.peHeader.imageBase],
+          ['Subsystem', report.peHeader.subsystem],
+          ['Number of Sections', report.peHeader.sectionsCount],
+          ['Characteristics', report.peHeader.characteristics]
+        ];
+        document.getElementById('peHeaderGrid').innerHTML = peFields.map(([k, v]) => `
+          <div class="kv-item">
+            <div class="k">${escapeHtml(k)}</div>
+            <div class="v">${escapeHtml(v)}</div>
+          </div>
+        `).join('');
+
+        renderPeSectionsTable();
+        renderImportedApis();
+        renderTimelineTable();
+        renderCharts(report);
+      }
+
+      function renderPeSectionsTable() {
+        const report = getCurrentReport();
+        if (!report) return;
+        const query = document.getElementById('sectionSearchInput').value.trim().toLowerCase();
+        let rows = report.sections.filter(s => s.name.toLowerCase().includes(query));
+
+        const { key, dir } = state.sectionSort;
+        rows.sort((a, b) => {
+          const valA = a[key];
+          const valB = b[key];
+          if (typeof valA === 'number') return dir === 'asc' ? valA - valB : valB - valA;
+          return dir === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+        });
+
+        document.getElementById('peSectionsBody').innerHTML = rows.map(s => {
+          const isHighEntropy = s.entropy > 6.8;
+          return `
+            <tr class="${isHighEntropy ? 'row-warning' : ''}">
+              <td class="mono" style="font-weight:700; color:${isHighEntropy ? '#FCA5A5' : '#22D3EE'}">${escapeHtml(s.name)}</td>
+              <td class="mono">${escapeHtml(s.virtualAddress)}</td>
+              <td class="mono">${s.virtualSize.toLocaleString()} B</td>
+              <td class="mono">${s.rawSize.toLocaleString()} B</td>
+              <td class="mono" style="font-weight:700; color:${isHighEntropy ? '#F87171' : '#34D399'}">${s.entropy.toFixed(2)} bits/byte</td>
+              <td>${isHighEntropy
+                ? '<span class="badge badge-malicious">HIGH ENTROPY (&gt;6.8) PACKED/ENCRYPTED</span>'
+                : '<span class="badge badge-clean">NORMAL ENTROPY</span>'}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      function renderImportedApis() {
+        const report = getCurrentReport();
+        if (!report) return;
+        const query = document.getElementById('apiSearchInput').value.trim().toLowerCase();
+        const filtered = report.imports.filter(imp =>
+          imp.dll.toLowerCase().includes(query) ||
+          imp.apis.some(a => a.toLowerCase().includes(query))
+        );
+
+        document.getElementById('importedDllsGrid').innerHTML = filtered.map(imp => `
+          <div class="concept-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <strong class="mono" style="color:${imp.suspicious ? '#FBBF24' : '#22D3EE'}">${escapeHtml(imp.dll)}</strong>
+              <span class="badge ${imp.suspicious ? 'badge-suspicious' : 'badge-clean'}">${imp.suspicious ? 'SENSITIVE APIs' : 'STANDARD'}</span>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:6px;">
+              ${imp.apis.map(api => `<span class="mono" style="font-size:11.5px; padding:3px 7px; border-radius:5px; background:rgba(8,13,24,0.85); border:1px solid rgba(148,163,184,0.18); color:#E2E8F0;">${escapeHtml(api)}</span>`).join('')}
+            </div>
+          </div>
+        `).join('');
+      }
+
+      function renderTimelineTable() {
+        const report = getCurrentReport();
+        if (!report) return;
+        const catFilter = document.getElementById('timelineCategoryFilter').value;
+        const events = report.timeline.filter(ev => catFilter === 'ALL' || ev.type === catFilter);
+
+        document.getElementById('behaviorTimelineBody').innerHTML = events.map(ev => {
+          const riskBadge = ev.risk === 'HIGH' ? 'badge-malicious' : (ev.risk === 'MEDIUM' ? 'badge-suspicious' : 'badge-clean');
+          return `
+            <tr>
+              <td class="mono" style="color:#22D3EE; white-space:nowrap;">${escapeHtml(ev.time)}</td>
+              <td class="mono">${escapeHtml(ev.process)}</td>
+              <td><span class="badge badge-info">${escapeHtml(ev.type)}</span></td>
+              <td class="mono" style="font-weight:600; color:#FBBF24">${escapeHtml(ev.api)}</td>
+              <td style="color:var(--text-secondary)">${escapeHtml(ev.desc)}</td>
+              <td><span class="badge ${riskBadge}">${escapeHtml(ev.risk)}</span></td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      function renderCharts(report) {
+        if (typeof Chart === 'undefined') return;
+
+        // Destroy previous instances safely
+        Object.keys(state.charts).forEach(k => {
+          if (state.charts[k]) {
+            state.charts[k].destroy();
+            state.charts[k] = null;
+          }
+        });
+
+        const cleanCount = state.reports.filter(r => r.verdict === 'CLEAN').length;
+        const suspCount = state.reports.filter(r => r.verdict === 'SUSPICIOUS').length;
+        const malCount = state.reports.filter(r => r.verdict === 'MALICIOUS').length;
+
+        // 1. Doughnut Chart
+        const ctx1 = document.getElementById('verdictDoughnutChart').getContext('2d');
+        state.charts.doughnut = new Chart(ctx1, {
+          type: 'doughnut',
+          data: {
+            labels: ['Clean', 'Suspicious', 'Malicious'],
+            datasets: [{
+              data: [cleanCount, suspCount, malCount],
+              backgroundColor: ['#10B981', '#F59E0B', '#EF4444'],
+              borderColor: '#0F172A',
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: 'bottom', labels: { color: '#CBD5E1', font: { size: 11 } } }
+            }
+          }
+        });
+
+        // 2. Horizontal Bar Chart
+        const ctx2 = document.getElementById('behaviorBarChart').getContext('2d');
+        state.charts.bar = new Chart(ctx2, {
+          type: 'bar',
+          data: {
+            labels: Object.keys(report.behaviorCategories),
+            datasets: [{
+              label: 'API Calls (DEMO)',
+              data: Object.values(report.behaviorCategories),
+              backgroundColor: ['#06B6D4', '#3B82F6', '#F59E0B', '#EF4444', '#10B981'],
+              borderRadius: 5
+            }]
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { ticks: { color: '#94A3B8' }, grid: { color: 'rgba(148,163,184,0.1)' } },
+              y: { ticks: { color: '#CBD5E1', font: { size: 11 } }, grid: { display: false } }
+            }
+          }
+        });
+
+        // 3. Line Chart
+        const ctx3 = document.getElementById('eventsLineChart').getContext('2d');
+        state.charts.line = new Chart(ctx3, {
+          type: 'line',
+          data: {
+            labels: ['0s', '10s', '20s', '30s', '40s', '50s', '60s'],
+            datasets: [{
+              label: 'Events / 10s',
+              data: report.eventsOverTime,
+              borderColor: '#22D3EE',
+              backgroundColor: 'rgba(34, 211, 238, 0.14)',
+              fill: true,
+              tension: 0.35,
+              pointRadius: 3
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { ticks: { color: '#94A3B8' }, grid: { color: 'rgba(148,163,184,0.08)' } },
+              y: { ticks: { color: '#94A3B8' }, grid: { color: 'rgba(148,163,184,0.1)' } }
+            }
+          }
+        });
+      }
+
+      document.getElementById('sampleSelector').addEventListener('change', (e) => {
+        state.selectedTaskId = e.target.value;
+        renderDashboard();
+      });
+
+      document.getElementById('sectionSearchInput').addEventListener('input', renderPeSectionsTable);
+      document.getElementById('apiSearchInput').addEventListener('input', renderImportedApis);
+      document.getElementById('timelineCategoryFilter').addEventListener('change', renderTimelineTable);
+
+      document.querySelectorAll('th.sortable').forEach(th => {
+        th.addEventListener('click', () => {
+          const key = th.dataset.sort;
+          if (state.sectionSort.key === key) {
+            state.sectionSort.dir = state.sectionSort.dir === 'asc' ? 'desc' : 'asc';
+          } else {
+            state.sectionSort = { key, dir: 'desc' };
+          }
+          renderPeSectionsTable();
+        });
+      });
+
+      /* ---------------------------------------------------------
+         10. PAGE 6: ANALYSIS HISTORY (SEARCH, FILTER, SORT, DELETE)
+         --------------------------------------------------------- */
+      function renderHistoryTable() {
+        const search = document.getElementById('historySearchInput').value.trim().toLowerCase();
+        const verdictFilter = document.getElementById('historyVerdictFilter').value;
+        const sortMode = document.getElementById('historySortSelect').value;
+
+        let list = state.reports.filter(r => {
+          const matchesSearch =
+            r.taskId.toLowerCase().includes(search) ||
+            r.filename.toLowerCase().includes(search) ||
+            r.sha256.toLowerCase().includes(search);
+          const matchesVerdict = verdictFilter === 'ALL' || r.verdict === verdictFilter;
+          return matchesSearch && matchesVerdict;
+        });
+
+        list.sort((a, b) => {
+          if (sortMode === 'date-desc') return b.submissionDate.localeCompare(a.submissionDate);
+          if (sortMode === 'date-asc') return a.submissionDate.localeCompare(b.submissionDate);
+          if (sortMode === 'score-desc') return b.malscore - a.malscore;
+          if (sortMode === 'score-asc') return a.malscore - b.malscore;
+          return 0;
+        });
+
+        const tbody = document.getElementById('historyTableBody');
+        if (list.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:24px; color:var(--text-muted);">Không tìm thấy bản ghi phân tích phù hợp.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = list.map(r => {
+          const vClass = r.verdict === 'CLEAN' ? 'badge-clean' : (r.verdict === 'SUSPICIOUS' ? 'badge-suspicious' : 'badge-malicious');
+          return `
+            <tr>
+              <td class="mono" style="color:#22D3EE; font-weight:700;">${escapeHtml(r.taskId)}</td>
+              <td class="mono">${escapeHtml(r.filename)}</td>
+              <td class="mono" title="${escapeHtml(r.sha256)}">${escapeHtml(r.sha256.slice(0, 20))}...</td>
+              <td class="mono" style="font-size:12px; color:var(--text-secondary)">${escapeHtml(r.submissionDate)}</td>
+              <td><span class="badge badge-info">${escapeHtml(r.status)}</span></td>
+              <td><span class="badge ${vClass}">${escapeHtml(r.verdict)}</span></td>
+              <td class="mono" style="font-weight:700;">${r.malscore.toFixed(1)}</td>
+              <td style="white-space:nowrap;">
+                <button class="btn btn-secondary btn-sm" data-view-task="${escapeHtml(r.taskId)}">View Details</button>
+                <button class="btn btn-danger btn-sm" data-del-task="${escapeHtml(r.taskId)}">Delete</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+        tbody.querySelectorAll('[data-view-task]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            state.selectedTaskId = btn.dataset.viewTask;
+            navigateTo('dashboard');
+          });
+        });
+
+        tbody.querySelectorAll('[data-del-task]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            state.pendingDeleteId = btn.dataset.delTask;
+            document.getElementById('deleteTargetLabel').textContent = state.pendingDeleteId;
+            document.getElementById('deleteConfirmModal').classList.add('open');
+          });
+        });
+      }
+
+      document.getElementById('historySearchInput').addEventListener('input', renderHistoryTable);
+      document.getElementById('historyVerdictFilter').addEventListener('change', renderHistoryTable);
+      document.getElementById('historySortSelect').addEventListener('change', renderHistoryTable);
+
+      document.getElementById('confirmDeleteBtn').addEventListener('click', () => {
+        if (!state.pendingDeleteId) return;
+        state.reports = state.reports.filter(r => r.taskId !== state.pendingDeleteId);
+        if (state.selectedTaskId === state.pendingDeleteId && state.reports.length > 0) {
+          state.selectedTaskId = state.reports[0].taskId;
+        }
+        document.getElementById('deleteConfirmModal').classList.remove('open');
+        showToast(`Đã xóa bản ghi ${state.pendingDeleteId}.`, 'info');
+        state.pendingDeleteId = null;
+        renderHistoryTable();
+        updateOverviewStats();
+      });
+
+      /* ---------------------------------------------------------
+         11. PAGE 7: SYSTEM INFORMATION STATUS TABLE
+         --------------------------------------------------------- */
+      function renderSystemStatusTable() {
+        const s = state.systemStatus;
+        const rows = [
+          { name: 'Web Server (Frontend UI)', target: window.location.origin || 'Local Browser Session', status: s.webServer, note: 'Giao diện SOC đang hoạt động trên trình duyệt' },
+          { name: 'Backend API (FastAPI/Flask)', target: state.backendUrl, status: s.backendApi, note: s.backendApi === 'CONNECTED' ? 'Phản hồi hợp lệ từ /api/system/status' : 'Chưa phát hiện tiến trình Python Backend đang chạy' },
+          { name: 'Cuckoo API', target: 'Ubuntu Server (Internal 127.0.0.1:8090)', status: s.cuckooApi, note: 'Chỉ truy vấn được thông qua Backend API trung gian' },
+          { name: 'Guest VM (Windows 10)', target: 'VirtualBox Host-Only (192.168.56.101)', status: s.guestVm, note: 'Trạng thái snapshot máy ảo phân tích cô lập' },
+          { name: 'Database (SQLite/MongoDB)', target: 'Ubuntu Backend Storage', status: s.database, note: 'Lưu trữ siêu dữ liệu báo cáo tĩnh & động' }
+        ];
+
+        document.getElementById('systemStatusTableBody').innerHTML = rows.map(r => {
+          const badgeClass = r.status === 'CONNECTED' ? 'badge-clean' : (r.status === 'DISCONNECTED' ? 'badge-malicious' : 'badge-unknown');
+          return `
+            <tr>
+              <td style="font-weight:600;">${escapeHtml(r.name)}</td>
+              <td class="mono" style="font-size:12px; color:#22D3EE">${escapeHtml(r.target)}</td>
+              <td><span class="badge ${badgeClass}">${escapeHtml(r.status)}</span></td>
+              <td style="color:var(--text-secondary); font-size:12.5px;">${escapeHtml(r.note)}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      document.getElementById('checkSystemStatusBtn').addEventListener('click', () => checkRealBackendConnection(false));
+
+      /* ---------------------------------------------------------
+         12. MODALS WIRING
+         --------------------------------------------------------- */
+      document.getElementById('openApiConfigBtn').addEventListener('click', () => {
+        document.getElementById('backendUrlInput').value = state.backendUrl;
+        document.getElementById('demoModeToggle').checked = state.demoMode;
+        document.getElementById('apiConfigModal').classList.add('open');
+      });
+
+      document.getElementById('testConnectionModalBtn').addEventListener('click', () => {
+        state.backendUrl = document.getElementById('backendUrlInput').value.trim() || 'http://127.0.0.1:8000';
+        checkRealBackendConnection(false);
+      });
+
+      document.getElementById('saveConfigModalBtn').addEventListener('click', () => {
+        state.backendUrl = document.getElementById('backendUrlInput').value.trim() || 'http://127.0.0.1:8000';
+        state.demoMode = document.getElementById('demoModeToggle').checked;
+        document.getElementById('apiConfigModal').classList.remove('open');
+        updateGlobalModeUI();
+        if (document.getElementById('page-dashboard').classList.contains('active')) renderDashboard();
+        if (document.getElementById('page-history').classList.contains('active')) renderHistoryTable();
+        showToast('Đã lưu cấu hình hệ thống.', 'success');
+      });
+
+      document.getElementById('openReportModalBtn').addEventListener('click', () => {
+        document.getElementById('reportPreviewModal').classList.add('open');
+      });
+
+      document.querySelectorAll('[data-close-modal]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.getElementById(btn.dataset.closeModal).classList.remove('open');
+        });
+      });
+
+      document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+        backdrop.addEventListener('click', (e) => {
+          if (e.target === backdrop) backdrop.classList.remove('open');
+        });
+      });
+
+      /* ---------------------------------------------------------
+         13. INITIAL BOOTSTRAP
+         --------------------------------------------------------- */
+      updateGlobalModeUI();
+      renderSystemStatusTable();
+      // Silently probe local backend on startup without faking status
+      checkRealBackendConnection(true);
+    })();
+  </script>
+</body>
+</html>
